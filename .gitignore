@@ -1,0 +1,42 @@
+# Isolated Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python caching and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# SQLite Databases & Storage folders
+*.db
+*.db-journal
+*.sqlite3
+backend/db/
+backend/db/*.db
+
+# Secrets & Environment variables
+.env
+.env.*
+backend/.env
+frontend/.env
+
+# Node.js dependencies & Frontend build outputs
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+
+# Operating System & IDE files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
