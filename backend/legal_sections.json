@@ -1,0 +1,135 @@
+[
+  {
+    "id": "bns_303",
+    "act": "BNS",
+    "section": "Section 303",
+    "title": "Theft",
+    "description": "Definition and punishment for theft. Whoever, intending to take dishonestly any movable property out of the possession of any person without that person's consent, moves that property in order to such taking, is said to commit theft. Punishment includes imprisonment up to three years, or with fine, or with both."
+  },
+  {
+    "id": "bns_305",
+    "act": "BNS",
+    "section": "Section 305",
+    "title": "Theft in dwelling house, means of transportation or place of worship",
+    "description": "Whoever commits theft in any building, tent, vessel, or transportation vehicle used as a human dwelling, or for the custody of property, shall be punished with imprisonment for a term which may extend to seven years and shall also be liable to fine."
+  },
+  {
+    "id": "bns_308",
+    "act": "BNS",
+    "section": "Section 308",
+    "title": "Extortion",
+    "description": "Intentionally putting any person in fear of any injury, and thereby dishonestly inducing that person to deliver to any person any property or valuable security. Punishable with imprisonment up to seven years, or with fine, or both."
+  },
+  {
+    "id": "bns_316",
+    "act": "BNS",
+    "section": "Section 316",
+    "title": "Criminal Breach of Trust",
+    "description": "Dishonestly misappropriating or converting to one's own use property entrusted, or dishonestly using or disposing of that property in violation of any direction of law or legal contract."
+  },
+  {
+    "id": "bns_318",
+    "act": "BNS",
+    "section": "Section 318",
+    "title": "Cheating and Dishonestly Inducing Delivery of Property",
+    "description": "Deceiving any person, and fraudulently or dishonestly inducing the person so deceived to deliver any property, or consent that any person shall retain any property. Includes online scams, financial fraud, impersonation, and fake websites."
+  },
+  {
+    "id": "bns_329",
+    "act": "BNS",
+    "section": "Section 329",
+    "title": "Criminal Trespass and House-breaking",
+    "description": "Entering into or upon property in the possession of another with intent to commit an offence or to intimidate, insult or annoy any person. House-breaking involves entering a building through forced openings (shattered windows, picked locks)."
+  },
+  {
+    "id": "bns_115",
+    "act": "BNS",
+    "section": "Section 115",
+    "title": "Voluntarily Causing Hurt / Assault",
+    "description": "Whoever does any act with the intention of thereby causing hurt to any person, or with the knowledge that he is likely thereby to cause hurt to any person, and does thereby cause hurt to any person, is said voluntarily to cause hurt. Includes physical assault and battery."
+  },
+  {
+    "id": "bns_117",
+    "act": "BNS",
+    "section": "Section 117",
+    "title": "Voluntarily Causing Grievous Hurt",
+    "description": "Grievous hurt includes emasculation, permanent privation of the sight of either eye or hearing of either ear, privation of any member or joint, destruction or permanent impairing of the powers of any member or joint, permanent disfiguration of the head or face, fracture or dislocation of a bone or tooth, or any hurt which endangers life."
+  },
+  {
+    "id": "bns_103",
+    "act": "BNS",
+    "section": "Section 103",
+    "title": "Murder",
+    "description": "Punishment for murder. Whoever commits murder shall be punished with death or imprisonment for life, and shall also be liable to fine. Murder is defined as causing death with intent of causing death or bodily injury likely to cause death."
+  },
+  {
+    "id": "bns_351",
+    "act": "BNS",
+    "section": "Section 351",
+    "title": "Criminal Intimidation",
+    "description": "Threatening another with any injury to his person, reputation or property, or to the person or reputation of any one in whom that person is interested, with intent to cause alarm to that person, or to cause him to do any act which he is not legally bound to do."
+  },
+  {
+    "id": "bns_111",
+    "act": "BNS",
+    "section": "Section 111",
+    "title": "Organized Crime",
+    "description": "Any continuing unlawful activity including kidnapping, robbery, extortion, land grabbing, contract killing, economic offences, cybercrimes on behalf of a crime syndicate or gang."
+  },
+  {
+    "id": "bnss_173",
+    "act": "BNSS",
+    "section": "Section 173",
+    "title": "Information in Cognizable Cases (Filing of FIR)",
+    "description": "Defines the process for filing a First Information Report (FIR). Mandates that every information relating to the commission of a cognizable offence shall be recorded by the officer-in-charge of a police station. It introduces the registration of electronic FIRs (e-FIR) provided it is signed within 3 days."
+  },
+  {
+    "id": "bnss_35",
+    "act": "BNSS",
+    "section": "Section 35",
+    "title": "Arrest of Persons Without Warrant",
+    "description": "Specifies when a police officer may arrest any person without an order from a Magistrate and without a warrant. Applicable to cognizable offences, presence of suspects, fear of tampering with evidence, or fleeing suspects."
+  },
+  {
+    "id": "bnss_105",
+    "act": "BNSS",
+    "section": "Section 105",
+    "title": "Mandatory Audio-Video Recording of Search and Seizure",
+    "description": "New BNSS provision mandating that the process of search and seizure of property/evidence (including cyber evidence, mobile phones, hard drives) must be recorded using audio-video electronic means, and the recording must be forwarded to the Magistrate without delay."
+  },
+  {
+    "id": "bnss_176",
+    "act": "BNSS",
+    "section": "Section 176",
+    "title": "Investigation by Police into Cognizable Offence",
+    "description": "Empowers officers to investigate cognizable offences within their jurisdiction. Detailed guidelines on reporting preliminary inquiries within 14 days for offences carrying 3 to 7 years imprisonment."
+  },
+  {
+    "id": "bnss_180",
+    "act": "BNSS",
+    "section": "Section 180",
+    "title": "Examination of Witnesses by Police",
+    "description": "Provides for the oral examination of any person supposed to be acquainted with the facts and circumstances of the case, and reducing their statement to writing or audio-video electronic recording."
+  },
+  {
+    "id": "bsa_57",
+    "act": "BSA",
+    "section": "Section 57",
+    "title": "Primary Evidence",
+    "description": "Primary evidence means the document itself produced for the inspection of the Court. Explains that electronic/digital records printed, stored in optical/magnetic media are primary evidence if certified."
+  },
+  {
+    "id": "bsa_61",
+    "act": "BSA",
+    "section": "Section 61",
+    "title": "Admissibility of Electronic or Digital Records",
+    "description": "Any information contained in an electronic record which is printed on paper, stored, recorded or copied in optical or magnetic media produced by a computer shall be deemed to be a document and is admissible in evidence without further proof."
+  },
+  {
+    "id": "bsa_63",
+    "act": "BSA",
+    "section": "Section 63",
+    "title": "Certificate for Admissibility of Electronic Evidence",
+    "description": "Replaces the old Section 65B of IEA. Specifies the mandatory conditions and format for a certificate signed by a person in charge of the computer device or service to admit electronic/digital logs, recordings, or files in a court of law."
+  }
+]
