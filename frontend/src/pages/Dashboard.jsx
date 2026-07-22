@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
-  FileText, ShieldAlert, CheckCircle, Database, 
-  FolderPlus, History, Settings, ShieldAlert as AdminIcon,
-  Plus, ArrowRight, Eye, Calendar, MapPin
+  FilePlus, MessageSquare, ClipboardList, Briefcase, FileText,
+  Users, CheckCircle2, AlertCircle, BarChart3, Clock, 
+  ArrowRight, ShieldCheck, Cpu, Terminal, Compass, BookOpen
 } from "lucide-react";
 import { api } from "../utils/api";
 
@@ -16,7 +16,11 @@ export default function Dashboard() {
     closed_cases: 0,
     resolved_cases: 0,
     recent_cases: [],
-    recent_logs: []
+    recent_logs: [],
+    most_cited_sections: [],
+    case_categories: [],
+    monthly_volume: [],
+    avg_drafting_time_minutes: 0
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -25,240 +29,202 @@ export default function Dashboard() {
   const username = api.getUsername();
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
+    const fetchStats = async () => {
       try {
         const data = await api.getStats();
         setStats(data);
       } catch (err) {
-        setError("Failed to fetch dashboard metrics. Is the backend running?");
+        setError("Unable to connect to the backend server. Verify uvicorn is running.");
       } finally {
         setLoading(false);
       }
     };
-    fetchDashboardData();
+    fetchStats();
   }, []);
 
-  const getStatusColor = (status) => {
+  const getStatusBadge = (status) => {
     switch (status) {
-      case "open": return "bg-sky-950 border-sky-500/30 text-sky-400";
-      case "under_investigation": return "bg-amber-950 border-amber-500/30 text-amber-400";
-      case "resolved": return "bg-emerald-950 border-emerald-500/30 text-emerald-400";
-      case "closed": return "bg-slate-800 border-slate-700 text-slate-400";
-      default: return "bg-police-800 text-slate-300";
+      case "draft": return "bg-[#F1F5F9] text-[#475569] border-[#E2E8F0]";
+      case "under_review": return "bg-[#F3E8FF] text-[#7E22CE] border-[#E9D5FF]";
+      case "filed": return "bg-[#ECFDF5] text-[#047857] border-[#A7F3D0]";
+      case "investigating": return "bg-[#FFFBEB] text-[#B45309] border-[#FDE68A]";
+      default: return "bg-[#F1F5F9] text-[#64748B] border-[#E2E8F0]";
     }
   };
 
-  const formatStatus = (status) => {
-    return status ? status.replace("_", " ").toUpperCase() : "N/A";
+  const getTodayCasesCount = () => {
+    // Mock calculating cases registered today
+    return stats.recent_cases?.length || 0;
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 font-sans">
+    <div className="space-y-8 font-sans select-none">
       
-      {/* Welcome Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl glass-panel border-glass-inset shadow-glass bg-gradient-to-r from-police-900/60 to-police-950/30">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-white">
-            Welcome back, <span className="text-cyber-cyan">{username}</span>
-          </h1>
-          <p className="text-xs md:text-sm text-slate-400 mt-1">
-            Logged into terminal as <span className="text-cyan-400/80 font-mono uppercase">{role === "admin" ? "Superintendent / Admin" : "Investigating Officer"}</span>. Ready for case logging and BNS alignment.
-          </p>
+      {/* 1. What Happened Today / Quick Starts */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-[#111827] text-lg font-bold tracking-tight">What happened today?</h2>
+            <p className="text-xs text-[#6B7280]">Review operational diagnostics and start automated trial procedures.</p>
+          </div>
+          <span className="text-[10px] font-bold text-[#6B7280] font-mono tracking-widest uppercase">
+            JURISDICTION STATION: {stats.recent_cases[0]?.station || "Central Cyber PS"}
+          </span>
         </div>
-        <button
-          onClick={() => navigate("/analyze")}
-          className="flex items-center justify-center space-x-2 px-5 py-3 rounded-xl bg-gradient-to-r from-police-600 to-cyber-cyan text-white font-bold text-sm hover:shadow-cyber-glow transition-all duration-300 transform hover:scale-[1.02] cursor-pointer"
-        >
-          <Plus className="h-4 w-4" />
-          <span>New Case Entry</span>
-        </button>
+
+        {/* Quick action grid boxes */}
+        <div className="grid md:grid-cols-3 gap-6">
+          
+          <div 
+            onClick={() => navigate("/new-case")}
+            className="saas-card saas-card-hover p-6 flex flex-col justify-between h-44 cursor-pointer border-t-4 border-t-[#2563EB]"
+          >
+            <div className="h-10 w-10 bg-[#EFF6FF] text-[#2563EB] rounded-xl flex items-center justify-center">
+              <FilePlus className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-[#111827] flex items-center gap-1.5">
+                <span>Start New Investigation</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </h3>
+              <p className="text-xs text-[#6B7280] mt-1">Ingest facts and verify code citations under BNS 2023.</p>
+            </div>
+          </div>
+
+          <div 
+            onClick={() => navigate("/assistant")}
+            className="saas-card saas-card-hover p-6 flex flex-col justify-between h-44 cursor-pointer border-t-4 border-t-[#06B6D4]"
+          >
+            <div className="h-10 w-10 bg-[#ECFDF5] text-[#06B6D4] rounded-xl flex items-center justify-center">
+              <MessageSquare className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-[#111827] flex items-center gap-1.5">
+                <span>Ask CrimeGPT</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </h3>
+              <p className="text-xs text-[#6B7280] mt-1">Query semantic databases for procedural compliance guidelines.</p>
+            </div>
+          </div>
+
+          <div 
+            onClick={() => navigate("/legal-search")}
+            className="saas-card saas-card-hover p-6 flex flex-col justify-between h-44 cursor-pointer border-t-4 border-t-[#10B981]"
+          >
+            <div className="h-10 w-10 bg-emerald-50 text-[#10B981] rounded-xl flex items-center justify-center">
+              <BookOpen className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-[#111827] flex items-center gap-1.5">
+                <span>IPC to BNS Converter</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </h3>
+              <p className="text-xs text-[#6B7280] mt-1">Lookup legacy provision replacements and court citations.</p>
+            </div>
+          </div>
+
+        </div>
       </div>
 
       {error && (
-        <div className="p-4 rounded-xl bg-rose-950/30 border border-rose-500/30 text-rose-400 text-sm">
-          {error}
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs flex items-center gap-2">
+          <AlertCircle className="h-4.5 w-4.5" />
+          <span>{error}</span>
         </div>
       )}
 
-      {/* Metrics Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {/* Total Cases */}
-        <div className="p-5 rounded-2xl glass-panel border-glass-inset shadow-glass flex items-start space-x-4">
-          <div className="p-3 bg-blue-950/80 border border-blue-500/20 text-blue-400 rounded-xl">
-            <Database className="h-5 w-5" />
+      {/* 2. Key Metrics Stats Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+        {[
+          { title: "TODAY'S CASES", val: getTodayCasesCount(), desc: "Added since midnight", icon: <Clock className="h-4 w-4 text-[#2563EB]" /> },
+          { title: "ACTIVE FILES", val: stats.open_cases, desc: "Awaiting legal signature", icon: <Compass className="h-4 w-4 text-[#B45309]" /> },
+          { title: "FILED REPORTS", val: stats.resolved_cases, desc: "Sealed court dossiers", icon: <CheckCircle2 className="h-4 w-4 text-[#047857]" /> },
+          { title: "AVERAGE DRAFTING TIME", val: `${stats.avg_drafting_time_minutes}m`, desc: "AI optimization latency", icon: <Cpu className="h-4 w-4 text-[#7E22CE]" /> }
+        ].map((m, idx) => (
+          <div key={idx} className="bg-white p-5 rounded-2xl border border-[#E2E8F0] shadow-sm flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] font-bold text-[#6B7280] font-mono tracking-widest uppercase">{m.title}</span>
+              <span className="text-2xl font-black text-[#111827] block">{loading ? "..." : m.val}</span>
+              <span className="text-[10px] text-[#6B7280] block font-medium">{m.desc}</span>
+            </div>
+            <div className="h-8 w-8 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg flex items-center justify-center">
+              {m.icon}
+            </div>
           </div>
-          <div>
-            <span className="block text-xs font-medium text-slate-400 font-mono">TOTAL FILES</span>
-            <span className="text-2xl md:text-3xl font-black text-white">{loading ? "..." : stats.total_cases}</span>
-          </div>
-        </div>
-
-        {/* Active Investigations */}
-        <div className="p-5 rounded-2xl glass-panel border-glass-inset shadow-glass flex items-start space-x-4">
-          <div className="p-3 bg-amber-950/80 border border-amber-500/20 text-amber-400 rounded-xl">
-            <ShieldAlert className="h-5 w-5" />
-          </div>
-          <div>
-            <span className="block text-xs font-medium text-slate-400 font-mono">UNDER INVESTIGATION</span>
-            <span className="text-2xl md:text-3xl font-black text-white">{loading ? "..." : stats.active_cases + stats.open_cases}</span>
-          </div>
-        </div>
-
-        {/* Resolved Cases */}
-        <div className="p-5 rounded-2xl glass-panel border-glass-inset shadow-glass flex items-start space-x-4">
-          <div className="p-3 bg-emerald-950/80 border border-emerald-500/20 text-emerald-400 rounded-xl">
-            <CheckCircle className="h-5 w-5" />
-          </div>
-          <div>
-            <span className="block text-xs font-medium text-slate-400 font-mono">RESOLVED CASES</span>
-            <span className="text-2xl md:text-3xl font-black text-white">{loading ? "..." : stats.resolved_cases}</span>
-          </div>
-        </div>
-
-        {/* Closed Cases */}
-        <div className="p-5 rounded-2xl glass-panel border-glass-inset shadow-glass flex items-start space-x-4">
-          <div className="p-3 bg-slate-900 border border-slate-700/30 text-slate-400 rounded-xl">
-            <FileText className="h-5 w-5" />
-          </div>
-          <div>
-            <span className="block text-xs font-medium text-slate-400 font-mono">CLOSED FILE ARCHIVE</span>
-            <span className="text-2xl md:text-3xl font-black text-white">{loading ? "..." : stats.closed_cases}</span>
-          </div>
-        </div>
+        ))}
       </div>
 
-      {/* Main Grid: Left Section (Recent Cases), Right Section (Action Panel + Audit) */}
+      {/* 3. Live Cases & Audit Logs split row */}
       <div className="grid lg:grid-cols-3 gap-8">
         
-        {/* Left 2 Cols: Recent Cases */}
+        {/* Recent Cases */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-white">Recent Cases Dashboard</h2>
-            <button 
-              onClick={() => navigate("/history")} 
-              className="text-xs text-cyber-cyan hover:underline flex items-center space-x-1 cursor-pointer"
+            <h3 className="text-[#111827] text-sm font-bold uppercase tracking-wider font-mono">Recent Investigation entries</h3>
+            <button
+              onClick={() => navigate("/cases")}
+              className="text-xs text-[#2563EB] hover:underline font-semibold"
             >
-              <span>View History Archive</span>
-              <ArrowRight className="h-3 w-3" />
+              View Cases List
             </button>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             {loading ? (
-              <div className="p-8 rounded-2xl glass-panel text-center text-slate-400">Loading cases...</div>
+              <div className="text-center py-10 text-xs text-[#6B7280] font-mono animate-pulse">QUERYING FILES...</div>
             ) : stats.recent_cases.length === 0 ? (
-              <div className="p-8 rounded-2xl glass-panel text-center text-slate-400 space-y-3">
-                <p>No cases registered in local database yet.</p>
-                <button
-                  onClick={() => navigate("/analyze")}
-                  className="px-4 py-2 bg-police-800 hover:bg-police-700 text-cyber-cyan border border-cyber-cyan/30 rounded-lg text-xs font-bold cursor-pointer"
-                >
-                  Create Your First Case File
-                </button>
+              <div className="bg-white p-8 rounded-2xl border border-[#E2E8F0] text-center text-xs text-[#6B7280] italic">
+                No active case logs recorded.
               </div>
             ) : (
-              stats.recent_cases.map((caseItem) => (
+              stats.recent_cases.map((c) => (
                 <div 
-                  key={caseItem.id}
-                  className="p-5 rounded-2xl glass-panel border-glass-inset shadow-glass hover:bg-police-900/30 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
+                  key={c.id}
+                  onClick={() => navigate(`/fir-generator?caseId=${c.id}`)}
+                  className="bg-white p-4.5 rounded-2xl border border-[#E2E8F0] shadow-sm hover:border-[#CBD5E1] transition-all cursor-pointer flex items-center justify-between gap-4"
                 >
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-2.5">
-                      <h3 className="text-base font-extrabold text-slate-100">{caseItem.title}</h3>
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${getStatusColor(caseItem.status)}`}>
-                        {formatStatus(caseItem.status)}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400 font-mono">
-                      <span className="flex items-center space-x-1">
-                        <Calendar className="h-3.5 w-3.5 text-slate-500" />
-                        <span>Created: {new Date(caseItem.created_at).toLocaleDateString()}</span>
-                      </span>
-                      <span>Case ID: #{caseItem.id}</span>
-                    </div>
+                  <div className="space-y-1 truncate">
+                    <h4 className="text-xs font-bold text-[#111827] truncate">{c.title}</h4>
+                    <span className="text-[10px] text-[#6B7280] font-mono block">DATE: {c.date || "N/A"} • PS: {c.station || "Central Cyber Cell"}</span>
                   </div>
 
-                  <button
-                    onClick={() => navigate(`/analyze?caseId=${caseItem.id}`)}
-                    className="flex items-center justify-center space-x-2 px-4 py-2.5 rounded-lg bg-police-850 hover:bg-police-800 border border-police-700/50 text-slate-200 hover:text-cyber-cyan text-xs font-bold transition-all cursor-pointer"
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                    <span>View Analysis</span>
-                  </button>
+                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border uppercase shrink-0 ${getStatusBadge(c.status)}`}>
+                    {c.status.replace("_", " ")}
+                  </span>
                 </div>
               ))
             )}
           </div>
         </div>
 
-        {/* Right 1 Col: Quick Links + Audit Trail */}
-        <div className="space-y-6">
-          
-          {/* Quick Actions Portal */}
-          <div className="space-y-3">
-            <h2 className="text-xl font-bold text-white">System Portals</h2>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => navigate("/analyze")}
-                className="p-4 rounded-xl glass-panel border-glass-inset text-left hover:bg-police-800/20 border hover:border-cyber-cyan/30 group transition-all cursor-pointer"
-              >
-                <FolderPlus className="h-5 w-5 text-cyber-cyan mb-2 group-hover:scale-110 transition-transform" />
-                <span className="block text-xs font-bold text-white">Case Entry</span>
-                <span className="text-[9px] text-slate-400">Launch AI RAG</span>
-              </button>
-
-              <button
-                onClick={() => navigate("/history")}
-                className="p-4 rounded-xl glass-panel border-glass-inset text-left hover:bg-police-800/20 border hover:border-cyber-cyan/30 group transition-all cursor-pointer"
-              >
-                <History className="h-5 w-5 text-blue-400 mb-2 group-hover:scale-110 transition-transform" />
-                <span className="block text-xs font-bold text-white">Archive</span>
-                <span className="text-[9px] text-slate-400">Search FIR logs</span>
-              </button>
-
-              <button
-                onClick={() => navigate("/settings")}
-                className="p-4 rounded-xl glass-panel border-glass-inset text-left hover:bg-police-800/20 border hover:border-cyber-cyan/30 group transition-all cursor-pointer"
-              >
-                <Settings className="h-5 w-5 text-slate-400 mb-2 group-hover:scale-110 transition-transform" />
-                <span className="block text-xs font-bold text-white">Settings</span>
-                <span className="text-[9px] text-slate-400">API Key status</span>
-              </button>
-
-              <button
-                onClick={() => navigate(role === "admin" ? "/admin" : "/settings")}
-                className="p-4 rounded-xl glass-panel border-glass-inset text-left hover:bg-police-800/20 border hover:border-cyber-cyan/30 group transition-all cursor-pointer"
-              >
-                <AdminIcon className="h-5 w-5 text-purple-400 mb-2 group-hover:scale-110 transition-transform" />
-                <span className="block text-xs font-bold text-white">Security</span>
-                <span className="text-[9px] text-slate-400">{role === "admin" ? "Audit Admin" : "Officer Config"}</span>
-              </button>
-            </div>
+        {/* Audit Log timeline terminal */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[#111827] text-sm font-bold uppercase tracking-wider font-mono">System Audit Feed</h3>
+            <span className="text-[10px] font-mono text-[#10B981] font-semibold flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#10B981] animate-ping" />
+              <span>LIVE FEED</span>
+            </span>
           </div>
 
-          {/* Audit Activity mock logs (mini card) */}
-          <div className="space-y-3">
-            <h2 className="text-xl font-bold text-white">Live System Logs</h2>
-            <div className="p-4 rounded-2xl glass-panel border-glass-inset shadow-glass space-y-3 font-mono text-[10px]">
-              {loading ? (
-                <div className="text-center text-slate-500 py-3">Fetching logs...</div>
-              ) : stats.recent_logs.length === 0 ? (
-                <div className="text-center text-slate-500 py-3">No activity logs recorded.</div>
-              ) : (
-                stats.recent_logs.map((log) => (
-                  <div key={log.id} className="border-b border-police-800/40 pb-2.5 last:border-0 last:pb-0">
-                    <div className="flex items-center justify-between text-slate-400 mb-1">
-                      <span className="text-cyan-400">{log.user}</span>
-                      <span>{new Date(log.timestamp).toLocaleTimeString()}</span>
-                    </div>
-                    <span className="block text-slate-200 uppercase font-semibold">{log.action}</span>
-                    <span className="block text-slate-400 leading-normal">{log.details}</span>
+          <div className="bg-white p-5 rounded-2xl border border-[#E2E8F0] shadow-sm max-h-[300px] overflow-y-auto space-y-4">
+            {loading ? (
+              <div className="text-center text-xs text-[#6B7280] font-mono py-10 animate-pulse">COMPILING LOGS...</div>
+            ) : stats.recent_logs.length === 0 ? (
+              <p className="text-center text-[#6B7280] italic text-xs py-4">No audit actions recorded.</p>
+            ) : (
+              stats.recent_logs.map((log) => (
+                <div key={log.id} className="border-b border-[#F1F5F9] pb-3 last:border-0 last:pb-0 space-y-1 text-xs">
+                  <div className="flex items-center justify-between text-[#6B7280]">
+                    <span className="font-bold text-[#111827]">@{log.user}</span>
+                    <span className="text-[9px] font-mono">{new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                   </div>
-                ))
-              )}
-            </div>
+                  <span className="block font-mono text-[9px] font-bold text-[#2563EB] uppercase">{log.action}</span>
+                  <p className="text-[10px] text-[#4B5563] leading-normal">{log.details}</p>
+                </div>
+              ))
+            )}
           </div>
-
         </div>
 
       </div>

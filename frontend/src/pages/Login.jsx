@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Shield, Key, User, Award, ArrowRight } from "lucide-react";
+import { Shield, Key, User, Award, ArrowRight, AlertCircle } from "lucide-react";
 import { api } from "../utils/api";
 
 export default function Login() {
@@ -27,7 +27,7 @@ export default function Login() {
     try {
       if (isRegister) {
         await api.register(username, password, badgeNumber, role);
-        setSuccess("Officer registered successfully! You can now log in.");
+        setSuccess("Officer registered successfully! Proceed to sign in.");
         setIsRegister(false);
         setPassword("");
       } else {
@@ -35,72 +35,69 @@ export default function Login() {
         navigate("/dashboard");
       }
     } catch (err) {
-      setError(err.message || "An authentication error occurred.");
+      setError(err.message || "Authentication credentials verification failed.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="relative min-h-screen bg-cyber-grid flex items-center justify-center p-6">
-      {/* Background Glow */}
-      <div className="absolute top-1/4 left-1/3 w-[300px] h-[300px] rounded-full bg-police-600/10 blur-[100px] pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/3 w-[300px] h-[300px] rounded-full bg-cyber-cyan/10 blur-[100px] pointer-events-none" />
-
-      <div className="w-full max-w-md rounded-2xl glass-panel p-8 border-glass-inset shadow-glass z-10 flex flex-col items-center">
+    <div className="min-h-screen bg-[#F8FAFC] bg-saas-grid flex items-center justify-center p-6 font-sans select-none">
+      
+      <div className="w-full max-w-sm bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-8 space-y-6">
         
-        {/* Logo and Brand Header */}
-        <div className="flex items-center space-x-3 mb-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-police-600 to-cyber-cyan text-white shadow-cyber-glow">
-            <Shield className="h-5 w-5" />
+        {/* Brand Header */}
+        <div className="flex flex-col items-center text-center space-y-2">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#2563EB] text-white shadow-sm font-bold">
+            CG
           </div>
           <div>
-            <h2 className="text-lg font-extrabold tracking-wider text-white">CRIME<span className="text-cyber-cyan">GPT</span></h2>
-            <p className="text-[9px] tracking-widest font-mono text-slate-400">STATE SECURE TERMINAL</p>
+            <h2 className="text-base font-bold tracking-tight text-[#111827]">
+              {isRegister ? "Register Officer Account" : "Officer Session Sign In"}
+            </h2>
+            <p className="text-xs text-[#6B7280]">
+              {isRegister ? "Register system credentials below" : "Enter badge details to access court files"}
+            </p>
           </div>
         </div>
 
-        <h2 className="text-xl font-bold text-white text-center mb-1">
-          {isRegister ? "Register Officer Account" : "Officer Sign In"}
-        </h2>
-        <p className="text-xs text-slate-400 text-center mb-6">
-          {isRegister ? "Create credentials for legal database access" : "Verify badge credentials to establish session"}
-        </p>
-
-        {/* Messages */}
+        {/* Status Alerts */}
         {error && (
-          <div className="w-full mb-4 p-3 rounded-lg bg-rose-950/40 border border-rose-500/30 text-rose-400 text-xs">
-            {error}
+          <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-650 text-xs flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{error}</span>
           </div>
         )}
         {success && (
-          <div className="w-full mb-4 p-3 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 text-xs">
-            {success}
+          <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-650 text-xs flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{success}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="w-full space-y-4">
+        {/* Input Form */}
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div>
-            <label className="block text-[10px] font-semibold text-slate-400 mb-1.5 font-mono">OFFICER USERNAME</label>
+            <label className="block text-[11px] font-semibold text-[#4B5563] mb-1 font-mono uppercase">OFFICER USERNAME</label>
             <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-[#9CA3AF]">
                 <User className="h-4 w-4" />
               </span>
               <input
                 type="text"
                 required
-                placeholder="e.g. officer_amit"
+                placeholder="e.g. officer_test"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full glass-input pl-10 pr-4 py-2.5 text-xs"
+                className="w-full saas-input pl-9 pr-4 py-2.5"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-[10px] font-semibold text-slate-400 mb-1.5 font-mono">PASSWORD</label>
+            <label className="block text-[11px] font-semibold text-[#4B5563] mb-1 font-mono uppercase">PASSWORD</label>
             <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-[#9CA3AF]">
                 <Key className="h-4 w-4" />
               </span>
               <input
@@ -109,7 +106,7 @@ export default function Login() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full glass-input pl-10 pr-4 py-2.5 text-xs"
+                className="w-full saas-input pl-9 pr-4 py-2.5"
               />
             </div>
           </div>
@@ -117,31 +114,31 @@ export default function Login() {
           {isRegister && (
             <>
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 mb-1.5 font-mono">BADGE ID / ID NUMBER</label>
+                <label className="block text-[11px] font-semibold text-[#4B5563] mb-1 font-mono uppercase">OFFICIAL BADGE ID</label>
                 <div className="relative">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-[#9CA3AF]">
                     <Award className="h-4 w-4" />
                   </span>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. B-9921"
+                    placeholder="e.g. B1002"
                     value={badgeNumber}
                     onChange={(e) => setBadgeNumber(e.target.value)}
-                    className="w-full glass-input pl-10 pr-4 py-2.5 text-xs"
+                    className="w-full saas-input pl-9 pr-4 py-2.5"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-400 mb-1.5 font-mono font-sans">SYSTEM ROLE</label>
+                <label className="block text-[11px] font-semibold text-[#4B5563] mb-1 font-mono uppercase">PRECINCT ROLE</label>
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
-                  className="w-full glass-input px-3 py-2.5 text-xs cursor-pointer focus:border-cyan-400"
+                  className="w-full saas-input px-3.5 py-2.5 cursor-pointer"
                 >
-                  <option value="officer" className="bg-police-900 text-slate-200">Investigating Officer</option>
-                  <option value="admin" className="bg-police-900 text-slate-200">Superintendent / Admin</option>
+                  <option value="officer">Investigating Officer</option>
+                  <option value="admin">Superintendent / Admin</option>
                 </select>
               </div>
             </>
@@ -150,26 +147,28 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex items-center justify-center space-x-2 py-3 rounded-xl bg-gradient-to-r from-police-600 to-cyber-cyan text-white font-bold hover:shadow-cyber-glow transition-all duration-300 transform hover:scale-[1.01] disabled:opacity-50 cursor-pointer"
+            className="w-full btn-primary py-3 flex items-center justify-center gap-2 cursor-pointer mt-4"
           >
-            <span>{loading ? "Establishing connection..." : isRegister ? "Register Account" : "Access Terminal"}</span>
+            <span>{loading ? "Validating details..." : isRegister ? "Create Account" : "Access Terminal"}</span>
             <ArrowRight className="h-4 w-4" />
           </button>
         </form>
 
-        <div className="mt-6 text-center">
+        <div className="text-center pt-2">
           <button
             onClick={() => {
               setIsRegister(!isRegister);
               setError("");
               setSuccess("");
             }}
-            className="text-xs text-cyber-cyan hover:underline cursor-pointer"
+            className="text-xs text-[#2563EB] hover:underline cursor-pointer font-semibold"
           >
-            {isRegister ? "Already registered? Sign in here" : "Need to register a new Officer? Click here"}
+            {isRegister ? "Already registered? Sign in here" : "Register a new Officer log"}
           </button>
         </div>
+
       </div>
+
     </div>
   );
 }

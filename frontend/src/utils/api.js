@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api";
 
 // Helper to get auth headers
 const getHeaders = (isMultipart = false) => {
@@ -42,11 +42,11 @@ export const api = {
     return data;
   },
   
-  register: async (username, password, badgeNumber = "", role = "officer") => {
+  register: async (username, password, badgeNumber = "", role = "officer", station = "Central Cyber Police Station") => {
     const response = await fetch(`${API_BASE_URL}/auth/register`, {
       method: "POST",
       headers: getHeaders(),
-      body: JSON.stringify({ username, password, badge_number: badgeNumber, role })
+      body: JSON.stringify({ username, password, badge_number: badgeNumber, role, station })
     });
     
     if (!response.ok) {
@@ -132,6 +132,17 @@ export const api = {
   },
   
   // RAG / AI Analysis
+  intakeCheck: async (intakeData) => {
+    const customKey = localStorage.getItem("gemini_api_key") || "";
+    const response = await fetch(`${API_BASE_URL}/cases/intake`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ ...intakeData, custom_key: customKey })
+    });
+    if (!response.ok) throw new Error("Intake checker failed");
+    return response.json();
+  },
+
   analyzeCase: async (caseId) => {
     const customKey = localStorage.getItem("gemini_api_key") || "";
     let url = `${API_BASE_URL}/cases/${caseId}/analyze`;
@@ -147,6 +158,133 @@ export const api = {
     return response.json();
   },
   
+  getFIRDraft: async (caseId) => {
+    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/fir-draft`, {
+      method: "GET",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to load FIR draft");
+    return response.json();
+  },
+
+  updateFIRDraft: async (caseId, draftData) => {
+    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/fir-draft`, {
+      method: "PUT",
+      headers: getHeaders(),
+      body: JSON.stringify(draftData)
+    });
+    if (!response.ok) throw new Error("Failed to update FIR draft");
+    return response.json();
+  },
+
+  // Evidence
+  getEvidenceList: async (caseId) => {
+    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/evidence`, {
+      method: "GET",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to load evidence checklist");
+    return response.json();
+  },
+
+  uploadEvidenceFile: async (caseId, file, custodyNotes = "") => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("custody_notes", custodyNotes);
+    
+    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/evidence/upload`, {
+      method: "POST",
+      headers: getHeaders(true),
+      body: formData
+    });
+    if (!response.ok) throw new Error("Failed to upload evidence");
+    return response.json();
+  },
+
+  updateEvidenceItem: async (caseId, itemId, fileType, custodyNotes) => {
+    const params = new URLSearchParams();
+    params.append("file_type", fileType);
+    params.append("custody_notes", custodyNotes);
+    
+    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/evidence/${itemId}?${params.toString()}`, {
+      method: "PUT",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to update evidence item");
+    return response.json();
+  },
+
+  deleteEvidenceItem: async (caseId, itemId) => {
+    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/evidence/${itemId}`, {
+      method: "DELETE",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to delete evidence item");
+    return response.json();
+  },
+
+  // SOP Guidance Chat
+  sopChat: async (caseId, message) => {
+    const customKey = localStorage.getItem("gemini_api_key") || "";
+    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/sop-chat`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ message, custom_key: customKey })
+    });
+    if (!response.ok) throw new Error("SOP Chat failed");
+    return response.json();
+  },
+
+  // General Legal Q&A Assistant Chat
+  generalChat: async (message) => {
+    const customKey = localStorage.getItem("gemini_api_key") || "";
+    const response = await fetch(`${API_BASE_URL}/assistant/chat`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ message, custom_key: customKey })
+    });
+    if (!response.ok) throw new Error("Assistant Q&A failed");
+    return response.json();
+  },
+
+  // Chat History
+  getChatHistory: async (caseId = null, messageType = "general_assistant") => {
+    let url = `${API_BASE_URL}/chat/history?message_type=${messageType}`;
+    if (caseId) {
+      url += `&case_id=${caseId}`;
+    }
+    const response = await fetch(url, {
+      method: "GET",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to fetch chat logs");
+    return response.json();
+  },
+
+  // Legal Search & Mapping
+  searchLaws: async (query) => {
+    const customKey = localStorage.getItem("gemini_api_key") || "";
+    const response = await fetch(`${API_BASE_URL}/legal/search?query=${encodeURIComponent(query)}&api_key=${encodeURIComponent(customKey)}`, {
+      method: "GET",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Legal search failed");
+    return response.json();
+  },
+
+  getLegalMapping: async (query = "") => {
+    let url = `${API_BASE_URL}/legal/mapping`;
+    if (query) {
+      url += `?query=${encodeURIComponent(query)}`;
+    }
+    const response = await fetch(url, {
+      method: "GET",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to retrieve legal mappings");
+    return response.json();
+  },
+
   // Downloads
   downloadPDF: async (caseId) => {
     const response = await fetch(`${API_BASE_URL}/cases/${caseId}/export/pdf`, {

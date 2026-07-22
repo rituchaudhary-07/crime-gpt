@@ -7,7 +7,7 @@ from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from docx import Document as DocxDocument
-from docx.shared import Inches, Pt
+from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 def parse_markdown_to_reportlab(md_text: str, styles) -> list:
@@ -289,14 +289,14 @@ def generate_docx_report(case_data: dict, analysis_output: str) -> bytes:
     title_run.font.name = 'Arial'
     title_run.font.size = Pt(18)
     title_run.bold = True
-    title_run.font.color.rgb = colors.HexColor('#1e3a8a') # Blue
+    title_run.font.color.rgb = RGBColor(0x1e, 0x3a, 0x8a) # Blue
     
     subtitle = doc.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
     sub_run = subtitle.add_run("GENERATED VIA LAW ENFORCEMENT LEGAL PORTAL")
     sub_run.font.size = Pt(9)
     sub_run.italic = True
-    sub_run.font.color.rgb = colors.HexColor('#64748b')
+    sub_run.font.color.rgb = RGBColor(0x64, 0x74, 0x8b)
     
     doc.add_paragraph("-" * 60).alignment = WD_ALIGN_PARAGRAPH.CENTER
     
@@ -329,7 +329,7 @@ def generate_docx_report(case_data: dict, analysis_output: str) -> bytes:
     
     # Narratives Section
     h_narrative = doc.add_heading("Case Narratives & Evidence Details", level=2)
-    h_narrative.runs[0].font.color.rgb = colors.HexColor('#0f766e')
+    h_narrative.runs[0].font.color.rgb = RGBColor(0x0f, 0x76, 0x6e)
     
     p_desc = doc.add_paragraph()
     p_desc.add_run("Incident Description: ").bold = True
@@ -347,7 +347,7 @@ def generate_docx_report(case_data: dict, analysis_output: str) -> bytes:
     
     # AI Findings Sections
     h_analysis = doc.add_heading("AI Generated Analysis & Draft FIR", level=2)
-    h_analysis.runs[0].font.color.rgb = colors.HexColor('#0f766e')
+    h_analysis.runs[0].font.color.rgb = RGBColor(0x0f, 0x76, 0x6e)
     
     lines = analysis_output.split('\n')
     for line in lines:
@@ -357,10 +357,10 @@ def generate_docx_report(case_data: dict, analysis_output: str) -> bytes:
             
         if line_strip.startswith('# '):
             p = doc.add_heading(line_strip[2:], level=1)
-            p.runs[0].font.color.rgb = colors.HexColor('#1e3a8a')
+            p.runs[0].font.color.rgb = RGBColor(0x1e, 0x3a, 0x8a)
         elif line_strip.startswith('## '):
             p = doc.add_heading(line_strip[3:], level=2)
-            p.runs[0].font.color.rgb = colors.HexColor('#0f766e')
+            p.runs[0].font.color.rgb = RGBColor(0x0f, 0x76, 0x6e)
         elif line_strip.startswith('### '):
             p = doc.add_heading(line_strip[4:], level=3)
         elif line_strip.startswith('- ') or line_strip.startswith('* '):

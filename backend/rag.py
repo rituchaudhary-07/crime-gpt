@@ -1,7 +1,9 @@
 import os
 import re
+import json
+from datetime import datetime
 import numpy as np
-import google.generativeai as genai
+from backend.ai_service import AIService
 from typing import List, Dict, Any, Optional
 
 # Precompiled database of Indian laws (BNS, BNSS, BSA) covering common crime categories
@@ -199,160 +201,359 @@ def keyword_search(query: str, top_k: int = 4) -> List[Dict[str, Any]]:
         
     return [item[1] for item in scored_sections[:top_k]]
 
-# Vector-based search engine (uses Gemini embeddings if available)
+# Vector-based search engine (uses ChromaDB vector database with NumPy fallback)
 def search_laws(query: str, api_key: str = "", top_k: int = 4) -> List[Dict[str, Any]]:
-    use_api_key = api_key or os.getenv("GEMINI_API_KEY", "")
-    if not use_api_key:
-        return keyword_search(query, top_k)
-        
-    try:
-        genai.configure(api_key=use_api_key)
-        # Fetch embedding for query
-        result = genai.embed_content(
-            model="models/text-embedding-004",
-            content=query,
-            task_type="retrieval_query"
-        )
-        query_vector = np.array(result['embedding'])
-        
-        # Precomputed embedding mechanism or fetch on the fly (since dataset is small and static, we can cache/precompute)
-        # For simplicity, we will calculate embeddings for the texts or match using keywords if exceptions arise.
-        # To avoid high latency on every request, we can generate them. Let's do a cache check:
-        if not hasattr(search_laws, "_embeddings_cache"):
-            search_laws._embeddings_cache = {}
-            
-        docs_to_embed = []
-        indices_to_embed = []
-        
-        for idx, item in enumerate(LEGAL_DATABASE):
-            if item["id"] not in search_laws._embeddings_cache:
-                doc_text = f"{item['act']} {item['section']}: {item['title']}. {item['description']}"
-                docs_to_embed.append(doc_text)
-                indices_to_embed.append(idx)
-                
-        if docs_to_embed:
-            res = genai.embed_content(
-                model="models/text-embedding-004",
-                content=docs_to_embed,
-                task_type="retrieval_document"
-            )
-            # Store in cache
-            for idx, vec in zip(indices_to_embed, res['embedding']):
-                search_laws._embeddings_cache[LEGAL_DATABASE[idx]["id"]] = np.array(vec)
-                
-        # Calculate Cosine Similarities
-        similarities = []
-        for item in LEGAL_DATABASE:
-            cached_vec = search_laws._embeddings_cache.get(item["id"])
-            if cached_vec is not None:
-                dot_product = np.dot(query_vector, cached_vec)
-                norm_q = np.linalg.norm(query_vector)
-                norm_doc = np.linalg.norm(cached_vec)
-                similarity = dot_product / (norm_q * norm_doc)
-                similarities.append((similarity, item))
-            else:
-                similarities.append((0.0, item))
-                
-        similarities.sort(key=lambda x: x[0], reverse=True)
-        return [item[1] for item in similarities[:top_k]]
-        
-    except Exception as e:
-        print(f"Error in vector search, falling back to keyword search: {e}")
-        return keyword_search(query, top_k)
+    from backend.vector_db import VectorDBService
+    return VectorDBService.search_dockets(query, top_k)
 
-# Draft an FIR based on case details and retrieved legal references
-def generate_analysis(case_title: str, description: str, location: str, date: str, evidence: str, witness: str, api_key: str = "") -> Dict[str, str]:
+# IPC/CrPC/IEA -> BNS/BNSS/BSA Section mapping lookup dataset
+OLD_TO_NEW_MAPPING = [
+    {"old_act": "IPC", "old_section": "Section 378", "old_title": "Theft", "new_act": "BNS", "new_section": "Section 303", "new_title": "Theft", "description": "Taking movable property dishonestly out of possession without consent."},
+    {"old_act": "IPC", "old_section": "Section 379", "old_title": "Punishment for Theft", "new_act": "BNS", "new_section": "Section 303", "new_title": "Theft", "description": "Punishment for theft (up to three years or fine)."},
+    {"old_act": "IPC", "old_section": "Section 380", "old_title": "Theft in Dwelling House", "new_act": "BNS", "new_section": "Section 305", "new_title": "Theft in Dwelling House/Vehicle/Place of Worship", "description": "Theft in human dwelling or property custody place (up to seven years)."},
+    {"old_act": "IPC", "old_section": "Section 383", "old_title": "Extortion", "new_act": "BNS", "new_section": "Section 308", "new_title": "Extortion", "description": "Inducing delivery of property by putting in fear of injury."},
+    {"old_act": "IPC", "old_section": "Section 405", "old_title": "Criminal Breach of Trust", "new_act": "BNS", "new_section": "Section 316", "new_title": "Criminal Breach of Trust", "description": "Misappropriating or converting property entrusted in violation of law/contract."},
+    {"old_act": "IPC", "old_section": "Section 415", "old_title": "Cheating", "new_act": "BNS", "new_section": "Section 318", "new_title": "Cheating", "description": "Deceiving person dishonestly to deliver property or consent."},
+    {"old_act": "IPC", "old_section": "Section 420", "old_title": "Cheating and Dishonestly Inducing Delivery", "new_act": "BNS", "new_section": "Section 318", "new_title": "Cheating and Dishonestly Inducing Delivery", "description": "Cheating to induce delivery of property (includes online scams)."},
+    {"old_act": "IPC", "old_section": "Section 441", "old_title": "Criminal Trespass", "new_act": "BNS", "new_section": "Section 329", "new_title": "Criminal Trespass and House-breaking", "description": "Forced entry or trespass with intent to commit offense."},
+    {"old_act": "IPC", "old_section": "Section 319", "old_title": "Hurt", "new_act": "BNS", "new_section": "Section 115", "new_title": "Voluntarily Causing Hurt / Assault", "description": "Causing bodily pain, disease, or infirmity."},
+    {"old_act": "IPC", "old_section": "Section 320", "old_title": "Grievous Hurt", "new_act": "BNS", "new_section": "Section 117", "new_title": "Voluntarily Causing Grievous Hurt", "description": "Severe injuries (emasculation, fracture, permanent disfigurement)."},
+    {"old_act": "IPC", "old_section": "Section 300", "old_title": "Murder", "new_act": "BNS", "new_section": "Section 103", "new_title": "Murder", "description": "Causing death with intention of causing death or bodily injury likely to cause death."},
+    {"old_act": "IPC", "old_section": "Section 506", "old_title": "Criminal Intimidation", "new_act": "BNS", "new_section": "Section 351", "new_title": "Criminal Intimidation", "description": "Threatening injury to person, reputation, or property to cause alarm."},
+    {"old_act": "CrPC", "old_section": "Section 154", "old_title": "Information in Cognizable Cases", "new_act": "BNSS", "new_section": "Section 173", "new_title": "Information in Cognizable Cases (Filing of FIR)", "description": "Process of recording and registering first information reports (including e-FIRs)."},
+    {"old_act": "CrPC", "old_section": "Section 41", "old_title": "Arrest without warrant", "new_act": "BNSS", "new_section": "Section 35", "new_title": "Arrest of Persons Without Warrant", "description": "When police may arrest without warrant for cognizable offense."},
+    {"old_act": "CrPC", "old_section": "Section 161", "old_title": "Examination of Witnesses", "new_act": "BNSS", "new_section": "Section 180", "new_title": "Examination of Witnesses by Police", "description": "Oral examination and recording of witness statements."},
+    {"old_act": "IEA", "old_section": "Section 65B", "old_title": "Admissibility of Electronic Records", "new_act": "BSA", "new_section": "Section 63", "new_title": "Certificate for Admissibility of Electronic Evidence", "description": "Mandatory conditions and signing certificate for electronic logs/evidence."}
+]
+
+def analyze_intake(description: str, title: str = "", location: str = "", date: str = "", api_key: str = "") -> Dict[str, Any]:
+    """
+    Inspects description and details to determine if crucial fields are missing:
+    - date/time
+    - location
+    - parties (victim, accused, or complainant)
+    - nature of incident
+    Returns missing fields and up to 4 clarifying questions.
+    """
     use_api_key = api_key or os.getenv("GEMINI_API_KEY", "")
     
-    # Retrieve laws
-    query_text = f"{case_title} {description} {evidence}"
-    matched_laws = search_laws(query_text, use_api_key, top_k=4)
+    # Offline rule-based missing field analysis
+    missing_fields = []
+    questions = []
     
-    laws_str = ""
-    for law in matched_laws:
-        laws_str += f"- **{law['act']} {law['section']} ({law['title']})**: {law['description']}\n"
-
-    # Prompt constructing
-    prompt = f"""
-You are CrimeGPT, an advanced AI legal intelligence assistant designed for Indian Law Enforcement.
-Analyze the following crime case details and draft:
-1. Legal Classification & Summary (Categorization and specific sections of Bharatiya Nyaya Sanhita (BNS) / Bharatiya Nagarik Suraksha Sanhita (BNSS) / Bharatiya Sakshya Adhiniyam (BSA)).
-2. Formal FIR Draft (formatted as a professional First Information Report under BNSS Section 173).
-3. Step-by-Step Investigation Checklist (including evidence handling under BSA Section 63/61 and video recording mandates under BNSS Section 105).
-
-CASE DETAILS:
-- Title: {case_title}
-- Date of Occurrence: {date}
-- Location: {location}
-- Case Description: {description}
-- Evidence Collected: {evidence}
-- Witness Details: {witness}
-
-RETRIEVED INDIAN LEGAL REFERENCES:
-{laws_str}
-
-Please generate the analysis using a clean, formal tone with clear markdown headings. Do not use placeholders; output concrete legal analysis and procedures.
-"""
-
-    if not use_api_key:
-        # Fallback template response if Gemini is not available
-        laws_li = "".join([f"<li><b>{l['act']} {l['section']} - {l['title']}</b>: {l['description']}</li>" for l in matched_laws])
+    desc_lower = description.lower()
+    
+    # 1. Date/Time check
+    has_date = bool(date) or any(x in desc_lower for x in ["202", "yesterday", "today", "pm", "am", "clock", "morning", "night", "on ", "date"])
+    if not has_date:
+        missing_fields.append("date_time")
+        questions.append("What was the specific date and approximate time when the incident took place?")
         
-        fallback_markdown = f"""# CrimeGPT Automated Legal Analysis (OFFLINE MODE)
+    # 2. Location check
+    has_location = bool(location) or any(x in desc_lower for x in [" at ", " in ", "street", "house", "shop", "office", "bank", "cafe", "road", "police station", "premises"])
+    if not has_location:
+        missing_fields.append("location")
+        questions.append("Can you clarify the exact location or premises where the incident occurred?")
+        
+    # 3. Parties check (accused/victim/complainant)
+    has_parties = any(x in desc_lower for x in ["complainant", "victim", "accused", "suspect", "he ", "she ", "they ", "name", "i was", "stole from", "robbed me", "by my", "manager", "guard"]) or len(re.findall(r'[A-Z][a-z]+', description)) >= 2
+    if not has_parties:
+        missing_fields.append("parties")
+        questions.append("Who are the parties involved? Please provide the name of the complainant, victim, or description of the suspects.")
+        
+    # 4. Nature check
+    has_nature = any(x in desc_lower for x in ["theft", "stole", "rob", "assault", "beat", "hit", "fraud", "scam", "cheat", "cheat", "trespass", "murder", "kill", "threaten", "conspiracy"])
+    if not has_nature:
+        missing_fields.append("nature_of_incident")
+        questions.append("What is the nature of the incident? Please clarify what offense occurred (e.g. theft, cyber scam, physical injury).")
+        
+    # Limit to 4 questions
+    questions = questions[:4]
+    
+    # If online, run Gemini for a high-quality extraction pass
+    if use_api_key:
+        prompt = f"""
+        Analyze the following incident description:
+        "{description}"
+        Additional Metadata: Title: "{title}", Location: "{location}", Date: "{date}"
+        
+        Determine if the following details are missing from either the description or the metadata:
+        1. Date & Time of Occurrence
+        2. Location / Precinct
+        3. Parties Involved (Victim, Accused, Complainant)
+        4. Nature of Incident (e.g. Theft, Assault, Cyber Fraud)
 
-> [!NOTE]
-> This analysis is compiled in Offline Mode using local keyword matching rules. To get customizable LLM case drafts and deep reasoning, please provide a valid Gemini API Key in the application Settings.
+        Return a JSON object containing:
+        - "missing_fields": list of strings (from "date_time", "location", "parties", "nature_of_incident")
+        - "questions": list of up to 4 clear, specific questions to prompt the officer for the missing details.
+        - "is_complete": boolean (true if nothing important is missing)
+        
+        Answer ONLY with the raw JSON object, no markdown blocks.
+        """
+        try:
+            genai.configure(api_key=use_api_key)
+            model = genai.GenerativeModel("gemini-2.0-flash")
+            response = model.generate_content(prompt)
+            clean_text = re.sub(r'```json|```', '', response.text).strip()
+            data = json.loads(clean_text)
+            # Standardize and return
+            return {
+                "missing_fields": data.get("missing_fields", []),
+                "questions": data.get("questions", [])[:4],
+                "is_complete": data.get("is_complete", len(data.get("missing_fields", [])) == 0)
+            }
+        except Exception as e:
+            print(f"Gemini intake analysis failed: {e}. Falling back to rule-based analysis.")
 
-## 1. Legal Classification
-Based on the details provided, the following sections from Indian Criminal Law are recommended for filing charges:
-{laws_str}
+    return {
+        "missing_fields": missing_fields,
+        "questions": questions,
+        "is_complete": len(missing_fields) == 0
+    }
+
+def run_cross_reference_validation(description: str, citations: List[Dict[str, Any]]) -> List[str]:
+    """
+    Flags inconsistencies between the incident description and the selected legal sections.
+    """
+    warnings = []
+    desc_lower = description.lower()
+    cited_refs = [c["section_reference"].lower() for c in citations]
+    
+    # Theft check
+    has_theft_word = any(x in desc_lower for x in ["theft", "stole", "steal", "robbed", "stolen", "burglar", "broken in", "shoplifting", "took my"])
+    has_theft_cite = any("303" in r or "305" in r for r in cited_refs)
+    if has_theft_word and not has_theft_cite:
+        warnings.append("Narrative describes property taking/theft, but no Theft sections (BNS Section 303 or 305) are cited.")
+        
+    # Assault / Hurt check
+    has_hurt_word = any(x in desc_lower for x in ["assault", "hurt", "hit", "beat", "punched", "kicked", "fight", "injury", "attacked", "slapped", "violence"])
+    has_hurt_cite = any("115" in r or "117" in r for r in cited_refs)
+    if has_hurt_word and not has_hurt_cite:
+        warnings.append("Narrative describes physical injury or assault, but Voluntarily Causing Hurt/Assault (BNS Section 115/117) is not cited.")
+        
+    # Cheating / Scam check
+    has_scam_word = any(x in desc_lower for x in ["cheat", "fraud", "scam", "phishing", "deceive", "impersonation", "fake", "transaction", "bank scam"])
+    has_scam_cite = any("318" in r or "316" in r for r in cited_refs)
+    if has_scam_word and not has_scam_cite:
+        warnings.append("Narrative describes online fraud or cheating, but Cheating/Scams (BNS Section 318) is not cited.")
+        
+    # Intimidation check
+    has_threat_word = any(x in desc_lower for x in ["threat", "threatened", "blackmail", "harm my", "scared", "intimidate"])
+    has_threat_cite = any("351" in r for r in cited_refs)
+    if has_threat_word and not has_threat_cite:
+        warnings.append("Narrative describes criminal intimidation/threats, but Criminal Intimidation (BNS Section 351) is not cited.")
+
+    # Opposite check: theft cited but no theft words
+    if has_theft_cite and not has_theft_word:
+        warnings.append("Theft charges (BNS Section 303/305) are selected, but the narrative does not mention stealing or property taking.")
+        
+    # Opposite check: assault cited but no violence words
+    if has_hurt_cite and not has_hurt_word:
+        warnings.append("Hurt/Assault charges (BNS Section 115/117) are selected, but the narrative does not indicate physical violence.")
+
+    return warnings
+
+def build_analysis_markdown(summary: str, citations: List[Dict[str, Any]], fir_draft_text: str, checklist: List[str]) -> str:
+    cites_str = ""
+    for c in citations:
+        cites_str += f"- **{c['section_reference']} ({c['title']})**: {c['citation_text']}\n  *Justification*: {c['justification']}\n"
+    
+    checklist_str = ""
+    for idx, item in enumerate(checklist):
+        checklist_str += f"{idx+1}. {item}\n"
+        
+    return f"""# CrimeGPT Automated Legal Analysis
+
+## 1. Legal Classification & Summary
+**Incident Summary:**
+{summary}
+
+**Recommended Provisions for Charge Sheet:**
+{cites_str}
 
 ## 2. Draft First Information Report (FIR)
-**UNDER SECTION 173 OF BHARATIYA NAGARIK SURAKSHA SANHITA (BNSS), 2023**
-
-- **District:** State Cyber/Local Police Jurisdiction
-- **Police Station:** Cyber & Commercial Crimes Unit
-- **FIR Number:** [Draft Generated]
-- **Date & Time of Report:** {date if date else 'Immediate'}
-
-### Description of Offence:
-The complainant reports that on {date if date else 'the specified date'} at {location if location else 'the specified location'}, the incident took place:
-"{description}"
-
-The evidence submitted includes: *{evidence if evidence else 'None specified'}*.
-Witness statements: *{witness if witness else 'None specified'}*.
-
-**Recommended Sections for Charge Sheet:**
-{", ".join([f"{l['act']} {l['section']}" for l in matched_laws])}
-
----
+{fir_draft_text}
 
 ## 3. Investigation Guidance & Checklist
 To ensure full admissibility under BSA 2023, follow this list:
+{checklist_str}
 1. **Audio-Video Recording (BNSS Section 105):** Ensure all search and seizure operations at the crime scene are fully video recorded on a secure mobile/camera. Upload the raw footage and log checksums.
 2. **Digital Evidence Collection (BSA Section 61 & 63):** For any seized hard drives, cyber logs, or chats, a **BSA Section 63 Certificate** must be filled out and signed by the technical handler. Obtain checksum hash values (MD5/SHA-256) immediately after imaging.
 3. **Witness Depositions (BNSS Section 180):** Record witness statements in writing or audio-video electronic format immediately.
 4. **Preliminary Report Submission:** Submit the copy of this report to the Judicial Magistrate under BNSS Section 172.
 """
+
+# Draft an FIR based on case details and retrieved legal references
+def generate_analysis(case_title: str, description: str, location: str, date: str, evidence: str, witness: str, api_key: str = "") -> Dict[str, Any]:
+    use_api_key = api_key or os.getenv("GEMINI_API_KEY", "")
+    
+    # 1. Retrieve matching law citations
+    query_text = f"{case_title} {description} {evidence}"
+    matched_laws = search_laws(query_text, use_api_key, top_k=4)
+    
+    citations_data = []
+    for law in matched_laws:
+        # Generate clean justification
+        justification = f"Applicable because the narrative describes elements of '{law['title']}'."
+        if "303" in law["section"] or "305" in law["section"]:
+            justification = "Directly applicable as the description details unauthorized removal or taking of movable property."
+        elif "318" in law["section"]:
+            justification = "Directly applicable as the narrative involves deception, fraudulent transaction, or digital scamming."
+        elif "115" in law["section"] or "117" in law["section"]:
+            justification = "Directly applicable due to reported physical injury, battery, or assault on the victim."
+        elif "351" in law["section"]:
+            justification = "Applicable as the accused issued verbal or physical threats of injury/harm."
+            
+        citations_data.append({
+            "section_reference": f"{law['act']} {law['section']}",
+            "act": law["act"],
+            "title": law["title"],
+            "citation_text": law["description"],
+            "justification": justification,
+            "confidence_score": 90
+        })
+
+    # Generate standard evidence checklist
+    checklist = ["Collect raw CCTV footage matching the incident window", "Obtain detailed written statement from complainant"]
+    desc_l = description.lower()
+    if any(x in desc_l for x in ["theft", "stole", "stolen", "property", "cafe"]):
+        checklist.extend(["Verify proof of ownership of stolen property", "Inspect point of entry for forced break-in traces", "Obtain logs from target machines if applicable"])
+    if any(x in desc_l for x in ["fraud", "cheat", "scam", "phishing", "bank"]):
+        checklist.extend(["Obtain bank statement displaying transaction trails", "Request server IP logs from gateway provider", "Secure WhatsApp/SMS communication chats under BSA Section 63 certificate"])
+    if any(x in desc_l for x in ["assault", "hurt", "beat", "hit", "injury"]):
+        checklist.extend(["Obtain official medical examination report (MLC)", "Secure video recording of crime scene under BNSS Section 105", "Locate and tag physical weapon if used"])
+
+    # Fallback generated text
+    laws_str = ""
+    for c in citations_data:
+        laws_str += f"- **{c['section_reference']} ({c['title']})**: {c['citation_text']}\n  *Justification*: {c['justification']}\n"
+        
+    fallback_summary = f"Incident reported at {location or 'Unknown'} on {date or 'Unknown Date'}. Subject details a case of {case_title}."
+    
+    fallback_fir = f"""**FIRST INFORMATION REPORT**
+**UNDER SECTION 173 OF BHARATIYA NAGARIK SURAKSHA SANHITA (BNSS), 2023**
+
+1. **District / Station**: Cyber Crimes Unit, {location if location else 'State Cyber Cell'}
+2. **FIR Number**: CR-DRAFT-2026-{datetime.now().strftime('%m%d')}
+3. **Date & Time of Report**: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+
+4. **Details of Offence**:
+   - **Date of Occurrence**: {date if date else 'Specified in incident narrative'}
+   - **Place of Occurrence**: {location if location else 'Specified in narrative'}
+   - **Nature of Offence**: {case_title}
+
+5. **Incident Narrative**:
+   "{description}"
+
+6. **Evidence Inventory**:
+   - {evidence if evidence else 'No physical items listed'}
+   - Statement of witnesses: {witness if witness else 'No statements registered'}
+
+7. **Provisions of Charges**:
+   The following provisions of Bharatiya Nyaya Sanhita (BNS) are cited:
+   {", ".join([c["section_reference"] for c in citations_data])}
+
+---
+Generated by CrimeGPT AI assistant. Subject to Investigating Officer manual sign-off.
+"""
+
+    validation_warnings = run_cross_reference_validation(description, citations_data)
+
+    if not use_api_key:
+        analysis_text = build_analysis_markdown(fallback_summary, citations_data, fallback_fir, checklist)
         return {
-            "analysis": fallback_markdown,
-            "citations": ", ".join([f"{l['act']} {l['section']}" for l in matched_laws])
+            "analysis": analysis_text,
+            "summary": fallback_summary,
+            "citations": citations_data,
+            "fir_draft_text": fallback_fir,
+            "evidence_checklist": checklist,
+            "validation_warnings": validation_warnings
+        }
+
+    provider, active_key, _ = AIService.get_provider_details(api_key)
+
+    if provider == "offline":
+        analysis_text = build_analysis_markdown(fallback_summary, citations_data, fallback_fir, checklist)
+        return {
+            "analysis": analysis_text,
+            "summary": fallback_summary,
+            "citations": citations_data,
+            "fir_draft_text": fallback_fir,
+            "evidence_checklist": checklist,
+            "validation_warnings": validation_warnings
         }
 
     try:
-        genai.configure(api_key=use_api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content(prompt)
+        prompt = f"""
+        You are CrimeGPT, an advanced AI legal intelligence assistant designed for Indian Law Enforcement.
+        Analyze this case:
+        - Title: {case_title}
+        - Date: {date}
+        - Location: {location}
+        - Description: {description}
+        - Evidence: {evidence}
+        - Witnesses: {witness}
         
-        citations_list = [f"{l['act']} {l['section']}" for l in matched_laws]
+        Retrieved Legal Citations:
+        {laws_str}
+        
+        Your task is to generate a structured analysis.
+        Return ONLY a JSON object matching this schema:
+        {{
+          "summary": "concise plain language incident summary",
+          "citations": [
+            {{
+              "section_reference": "BNS Section X",
+              "act": "BNS",
+              "title": "Section Title",
+              "citation_text": "Exact legal description or closely related definition",
+              "justification": "Clear reasoning of why this applies to the narrative details",
+              "confidence_score": 95
+            }}
+          ],
+          "fir_draft_text": "Professional First Information Report (FIR) draft adhering strictly to BNSS Section 173 guidelines. Use clear headings.",
+          "evidence_checklist": [
+            "Actionable checklist items for digital/physical evidence matching these crimes"
+          ]
+        }}
+        
+        Make sure the justification directly references details in the description. Ensure you follow strict legal boundaries and cite relevant acts (BNS, BNSS, BSA). Return only the JSON object. Do not include markdown blocks.
+        """
+        messages = [
+            {"role": "system", "content": "You are CrimeGPT, an advanced AI legal intelligence assistant designed for Indian Law Enforcement."},
+            {"role": "user", "content": prompt}
+        ]
+        
+        response_text = AIService.generate_chat_completion(messages, custom_key=api_key)
+        clean_text = re.sub(r'```json|```', '', response_text).strip()
+        data = json.loads(clean_text)
+        
+        # Verify citations are structured properly
+        parsed_cites = data.get("citations", [])
+        if not parsed_cites:
+            parsed_cites = citations_data
+            
+        summary_val = data.get("summary", fallback_summary)
+        fir_text_val = data.get("fir_draft_text", fallback_fir)
+        checklist_val = data.get("evidence_checklist", checklist)
+        analysis_text = build_analysis_markdown(summary_val, parsed_cites, fir_text_val, checklist_val)
         
         return {
-            "analysis": response.text,
-            "citations": ", ".join(citations_list)
+            "analysis": analysis_text,
+            "summary": summary_val,
+            "citations": parsed_cites,
+            "fir_draft_text": fir_text_val,
+            "evidence_checklist": checklist_val,
+            "validation_warnings": validation_warnings
         }
     except Exception as e:
-        # Fallback to local rendering on Gemini failure
+        print(f"Failed structured AI analysis: {e}. Falling back to rule-based RAG template.")
+        analysis_text = build_analysis_markdown(fallback_summary, citations_data, fallback_fir, checklist)
         return {
-            "analysis": f"Error running Gemini Generation: {e}\n\nHere are the matched legal sections:\n{laws_str}",
-            "citations": ", ".join([f"{l['act']} {l['section']}" for l in matched_laws])
+            "analysis": analysis_text,
+            "summary": fallback_summary,
+            "citations": citations_data,
+            "fir_draft_text": fallback_fir,
+            "evidence_checklist": checklist,
+            "validation_warnings": validation_warnings
         }

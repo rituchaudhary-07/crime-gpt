@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Key, Shield, User, HardDrive, CheckCircle2, AlertTriangle, Activity, Trash } from "lucide-react";
+import { Key, Shield, User, HardDrive, CheckCircle2, AlertTriangle, Activity, Trash, Cpu } from "lucide-react";
 import { api } from "../utils/api";
 
 export default function Settings() {
@@ -36,7 +36,6 @@ export default function Settings() {
       const profile = await api.getMe();
       setBadge(profile.badge_number || "N/A");
     } catch (e) {
-      // Fallback
       setBadge("N/A");
     }
   };
@@ -63,15 +62,12 @@ export default function Settings() {
     }
 
     try {
-      // Send API key to validation endpoint
       await api.validateAPIKey(apiKey);
-      
-      // Save locally
       localStorage.setItem("gemini_api_key", apiKey);
       setIsKeySaved(true);
-      setMsg({ type: "success", text: "Gemini API key validated and saved to browser cache successfully." });
+      setMsg({ type: "success", text: "Gemini API key validated and saved locally." });
     } catch (err) {
-      setMsg({ type: "error", text: "API Key validation check failed: " + err.message });
+      setMsg({ type: "error", text: "API Key validation failed: " + err.message });
     } finally {
       setValidating(false);
     }
@@ -81,22 +77,23 @@ export default function Settings() {
     localStorage.removeItem("gemini_api_key");
     setApiKey("");
     setIsKeySaved(false);
-    setMsg({ type: "success", text: "Dynamic API key cleared. Reverted to backend default configurations." });
+    setMsg({ type: "success", text: "Custom API key removed. Reverted to default settings." });
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 font-sans">
-      <div className="border-b border-police-800 pb-4">
-        <h1 className="text-2xl font-extrabold text-slate-100 font-sans">System Configurations & Keys</h1>
-        <p className="text-xs text-slate-400 mt-1">Configure your Gemini API settings, view badge information, and review database states.</p>
+    <div className="max-w-5xl mx-auto space-y-6 font-sans select-none">
+      
+      {/* Header */}
+      <div>
+        <h1 className="text-xl font-bold tracking-tight text-[#111827]">System Configurations & API Keys</h1>
+        <p className="text-xs text-[#6B7280] mt-1">Configure your AI Provider settings, view badge credentials, and review database states.</p>
       </div>
 
       {msg.text && (
-        <div className={`p-4 rounded-xl flex items-start space-x-3 text-xs border ${
-          msg.type === "error" 
-            ? "bg-rose-950/30 border-rose-500/30 text-rose-400" 
-            : "bg-emerald-950/30 border-emerald-500/30 text-emerald-400"
+        <div className={`p-4 rounded-xl flex items-start gap-2 text-xs border ${
+          msg.type === "error" ? "bg-red-50 border-red-200 text-red-600" : "bg-emerald-50 border-emerald-200 text-emerald-600"
         }`}>
+          <AlertTriangle className="h-4.5 w-4.5 shrink-0" />
           <span>{msg.text}</span>
         </div>
       )}
@@ -104,27 +101,27 @@ export default function Settings() {
       <div className="grid md:grid-cols-2 gap-8 items-start">
         
         {/* Left Side: API Key configuration */}
-        <div className="rounded-2xl glass-panel p-6 border-glass-inset shadow-glass space-y-5">
-          <div className="flex items-center space-x-3 border-b border-police-800 pb-3">
-            <Key className="h-5 w-5 text-cyber-cyan" />
-            <h2 className="text-lg font-bold text-white">Gemini API Configuration</h2>
+        <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-5">
+          <div className="flex items-center gap-3 border-b border-[#F1F5F9] pb-4">
+            <Key className="h-5 w-5 text-[#2563EB]" />
+            <h2 className="text-sm font-bold text-[#111827] tracking-tight">Custom AI Key Configuration</h2>
           </div>
 
-          <p className="text-xs text-slate-400 leading-relaxed font-sans">
-            CrimeGPT utilizes Gemini AI models (`gemini-1.5-flash` / `text-embedding-004`) to draft cognizable offense sheets and citations. Provide your own key to override backend environment defaults.
+          <p className="text-xs text-[#6B7280] leading-relaxed">
+            CrimeGPT utilizes advanced LLM models (DeepSeek, Llama, GPT) to draft offense sheets and citations. Provide your own key (OpenRouter, Groq, or OpenAI) to override backend environment defaults.
           </p>
 
-          <form onSubmit={handleSaveKey} className="space-y-4">
+          <form onSubmit={handleSaveKey} className="space-y-4 text-xs">
             <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5 font-mono">GEMINI API KEY</label>
+              <label className="block text-[11px] font-semibold text-[#4B5563] mb-1.5 font-mono uppercase tracking-wider">CUSTOM PROVIDER API KEY</label>
               <input
                 type="password"
                 required
                 disabled={isKeySaved}
-                placeholder="AIzaSy..."
+                placeholder="sk-... or gsk_..."
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                className="w-full glass-input px-3.5 py-2.5 text-xs font-mono disabled:opacity-60"
+                className="w-full saas-input px-4 py-3 text-xs font-mono disabled:opacity-60"
               />
             </div>
 
@@ -133,15 +130,15 @@ export default function Settings() {
                 <button
                   type="submit"
                   disabled={validating}
-                  className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-xl bg-gradient-to-r from-police-600 to-cyber-cyan text-white font-extrabold text-xs hover:shadow-cyber-glow transition-all disabled:opacity-50 cursor-pointer"
+                  className="flex-1 btn-primary py-3 cursor-pointer"
                 >
-                  <span>{validating ? "Running validation query..." : "Verify & Save API Key"}</span>
+                  <span>{validating ? "Validating API Key..." : "Verify & Save API Key"}</span>
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={handleClearKey}
-                  className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-xl bg-rose-950/40 hover:bg-rose-900/30 border border-rose-500/30 text-rose-400 font-bold text-xs transition-all cursor-pointer"
+                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 font-bold text-xs uppercase transition-all cursor-pointer"
                 >
                   <Trash className="h-4 w-4" />
                   <span>Remove Custom Key</span>
@@ -155,24 +152,24 @@ export default function Settings() {
         <div className="space-y-6">
           
           {/* Profile Card */}
-          <div className="rounded-2xl glass-panel p-6 border-glass-inset shadow-glass space-y-4">
-            <div className="flex items-center space-x-3 border-b border-police-800 pb-3">
-              <User className="h-5 w-5 text-blue-400" />
-              <h2 className="text-lg font-bold text-white">Officer ID Card</h2>
+          <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-4">
+            <div className="flex items-center gap-3 border-b border-[#F1F5F9] pb-4">
+              <User className="h-5 w-5 text-[#06B6D4]" />
+              <h2 className="text-sm font-bold text-[#111827] tracking-tight">Officer Profile Credentials</h2>
             </div>
             
-            <div className="grid grid-cols-2 gap-4 text-xs font-mono">
+            <div className="grid grid-cols-2 gap-4 text-xs font-mono text-[#374151]">
               <div>
-                <span className="block text-slate-500">OFFICER NAME:</span>
-                <span className="block text-slate-100 font-bold font-sans text-sm mt-0.5">{username}</span>
+                <span className="block text-[10px] text-[#6B7280] font-semibold tracking-wider">OFFICER ALIAS:</span>
+                <span className="block text-[#111827] font-bold font-sans text-sm mt-0.5">{username}</span>
               </div>
               <div>
-                <span className="block text-slate-500">BADGE NUMBER:</span>
-                <span className="block text-slate-100 font-bold mt-0.5">{badge}</span>
+                <span className="block text-[10px] text-[#6B7280] font-semibold tracking-wider">BADGE ID:</span>
+                <span className="block text-[#111827] font-bold mt-0.5">{badge}</span>
               </div>
               <div className="col-span-2">
-                <span className="block text-slate-500">CREDENTIALS ROLE:</span>
-                <span className="block text-cyan-400/80 uppercase font-bold mt-0.5">
+                <span className="block text-[10px] text-[#6B7280] font-semibold tracking-wider">SYSTEM CLEARANCE:</span>
+                <span className="block text-[#2563EB] font-bold tracking-wider uppercase mt-0.5 font-sans">
                   {role === "admin" ? "Superintendent / Admin Access" : "Investigating Officer"}
                 </span>
               </div>
@@ -180,49 +177,47 @@ export default function Settings() {
           </div>
 
           {/* Diagnostic Stats */}
-          <div className="rounded-2xl glass-panel p-6 border-glass-inset shadow-glass space-y-4">
-            <div className="flex items-center space-x-3 border-b border-police-800 pb-3">
-              <Activity className="h-5 w-5 text-purple-400" />
-              <h2 className="text-lg font-bold text-white">System Diagnostics</h2>
+          <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-4">
+            <div className="flex items-center gap-3 border-b border-[#F1F5F9] pb-4">
+              <Activity className="h-5 w-5 text-[#10B981] animate-pulse" />
+              <h2 className="text-sm font-bold text-[#111827] tracking-tight">System Diagnostics</h2>
             </div>
 
-            <div className="space-y-3.5 text-xs">
-              <div className="flex items-center justify-between border-b border-police-900 pb-2">
-                <span className="text-slate-400">FastAPI Connection:</span>
+            <div className="space-y-3.5 text-xs text-[#374151]">
+              <div className="flex items-center justify-between border-b border-[#F1F5F9] pb-2.5">
+                <span>FastAPI Backend Connection:</span>
                 {backendStatus === "online" ? (
-                  <span className="flex items-center space-x-1.5 text-emerald-400 font-bold font-mono">
+                  <span className="flex items-center gap-1 text-[#047857] font-bold">
                     <CheckCircle2 className="h-4 w-4 shrink-0" />
                     <span>ONLINE</span>
                   </span>
-                ) : backendStatus === "offline" ? (
-                  <span className="flex items-center space-x-1.5 text-rose-400 font-bold font-mono">
-                    <AlertTriangle className="h-4 w-4 shrink-0 animate-pulse" />
+                ) : (
+                  <span className="flex items-center gap-1 text-[#EF4444] font-bold animate-pulse">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
                     <span>OFFLINE</span>
                   </span>
-                ) : (
-                  <span className="text-slate-500 animate-pulse font-mono">CHECKING STATUS...</span>
                 )}
               </div>
 
-              <div className="flex items-center justify-between border-b border-police-900 pb-2">
-                <span className="text-slate-400">Database Engine:</span>
-                <span className="flex items-center space-x-1.5 text-slate-300 font-bold font-mono">
-                  <HardDrive className="h-4 w-4 text-slate-500 shrink-0" />
+              <div className="flex items-center justify-between border-b border-[#F1F5F9] pb-2.5">
+                <span>Database Engine:</span>
+                <span className="flex items-center gap-1.5 text-[#6B7280] font-mono font-bold">
+                  <HardDrive className="h-4 w-4 text-[#9CA3AF] shrink-0" />
                   <span>SQLite 3 (Local)</span>
                 </span>
               </div>
 
-              <div className="flex items-center justify-between border-b border-police-900 pb-2">
-                <span className="text-slate-400">Database Records:</span>
-                <span className="text-slate-300 font-bold font-mono">
+              <div className="flex items-center justify-between border-b border-[#F1F5F9] pb-2.5">
+                <span>Database Records:</span>
+                <span className="text-[#6B7280] font-bold font-mono">
                   {dbStats.total_cases} CASES / {dbStats.total_users} USERS
                 </span>
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Embedding Matcher:</span>
-                <span className="text-cyber-cyan font-bold font-mono">
-                  NumPy Cosine / Gemini
+                <span>Embedding Core Matcher:</span>
+                <span className="text-[#2563EB] font-bold font-mono">
+                  NumPy Cosine Vector / Offline Core
                 </span>
               </div>
             </div>
