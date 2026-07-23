@@ -76,17 +76,17 @@ export default function AIAssistant() {
   const loadChatSessions = async (selectSessionId = null) => {
     try {
       const data = await api.getChatSessions();
-      setSessions(data);
+      const sessionList = Array.isArray(data) ? data : [];
+      setSessions(sessionList);
 
       const storedSessionId = localStorage.getItem("crimegpt_active_session");
-      const targetSessionId = selectSessionId || storedSessionId || (data.length > 0 ? data[0].session_id : null);
+      const targetSessionId = selectSessionId || storedSessionId;
 
-      if (targetSessionId && data.some(s => s.session_id === targetSessionId)) {
-        setActiveSessionId(targetSessionId);
-        loadSessionMessages(targetSessionId);
-      } else {
-        setActiveSessionId(null);
-        setMessages([]);
+      if (targetSessionId && sessionList.some(s => (s.session_id === targetSessionId || s.id === targetSessionId))) {
+        const found = sessionList.find(s => (s.session_id === targetSessionId || s.id === targetSessionId));
+        const validId = found.session_id || found.id;
+        setActiveSessionId(validId);
+        loadSessionMessages(validId);
       }
     } catch (err) {
       console.log("Failed loading chat sessions:", err);
@@ -140,10 +140,15 @@ export default function AIAssistant() {
 
       setMessages(prev => [...prev, botMsg]);
       
-      if (res.session_id) {
-        setActiveSessionId(res.session_id);
-        localStorage.setItem("crimegpt_active_session", res.session_id);
-        const updatedSessions = await api.getChatSessions();
+      const newSessionId = res.session_id || res.id;
+      if (newSessionId) {
+        setActiveSessionId(newSessionId);
+        localStorage.setItem("crimegpt_active_session", newSessionId);
+      }
+
+      // Re-fetch chat sessions from backend to immediately populate the left sidebar!
+      const updatedSessions = await api.getChatSessions();
+      if (Array.isArray(updatedSessions)) {
         setSessions(updatedSessions);
       }
     } catch (err) {
@@ -280,10 +285,12 @@ export default function AIAssistant() {
     });
   };
 
+  const validSessions = Array.isArray(sessions) ? sessions : [];
+
   const groupedSessions = {
-    Today: sessions.filter(s => s.group === "Today"),
-    Yesterday: sessions.filter(s => s.group === "Yesterday"),
-    Older: sessions.filter(s => s.group === "Older")
+    Today: validSessions.filter(s => s.group === "Today" || !s.group),
+    Yesterday: validSessions.filter(s => s.group === "Yesterday"),
+    Older: validSessions.filter(s => s.group === "Older" || (s.group && !["Today", "Yesterday"].includes(s.group)))
   };
 
   return (
@@ -306,7 +313,7 @@ export default function AIAssistant() {
         {/* Scrollable Conversation Threads */}
         <div className="flex-1 overflow-y-auto p-3 space-y-5 text-xs">
           
-          {sessions.length === 0 ? (
+          {validSessions.length === 0 ? (
             <div className="p-6 text-center text-slate-500 text-xs space-y-2">
               <MessageSquare className="h-6 w-6 mx-auto opacity-50 text-blue-400" />
               <p className="font-semibold text-slate-400">No Chat History</p>
@@ -323,14 +330,15 @@ export default function AIAssistant() {
                   
                   <div className="space-y-1">
                     {groupList.map(s => {
-                      const isActive = s.session_id === activeSessionId;
-                      const isEditing = editingSessionId === s.session_id;
+                      const sid = s.session_id || s.id;
+                      const isActive = sid === activeSessionId;
+                      const isEditing = editingSessionId === sid;
 
                       return (
                         <div
-                          key={s.session_id}
+                          key={sid}
                           onClick={() => {
-                            if (!isEditing) loadSessionMessages(s.session_id);
+                            if (!isEditing) loadSessionMessages(sid);
                           }}
                           className={`group relative flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all text-xs ${
                             isActive 
@@ -370,7 +378,7 @@ export default function AIAssistant() {
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                             {isEditing ? (
                               <button
-                                onClick={() => handleRenameSession(s.session_id)}
+                                onClick={() => handleRenameSession(sid)}
                                 className="p-1 text-emerald-400 hover:text-white"
                                 title="Save Title"
                               >
@@ -380,7 +388,7 @@ export default function AIAssistant() {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setEditingSessionId(s.session_id);
+                                  setEditingSessionId(sid);
                                   setEditTitleInput(s.title);
                                 }}
                                 className="p-1 text-slate-400 hover:text-white"
@@ -391,7 +399,7 @@ export default function AIAssistant() {
                             )}
 
                             <button
-                              onClick={(e) => handleDeleteSession(e, s.session_id)}
+                              onClick={(e) => handleDeleteSession(e, sid)}
                               className="p-1 text-slate-400 hover:text-rose-400"
                               title="Delete Chat"
                             >
