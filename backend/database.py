@@ -29,6 +29,12 @@ class User(Base):
     role = Column(String, default="officer")  # officer, sho, admin
     badge_number = Column(String, nullable=True)
     station = Column(String, default="Central Cyber Police Station")
+    status = Column(String, default="pending")  # pending, approved, rejected, disabled
+    failed_login_attempts = Column(Integer, default=0)
+    locked_until = Column(DateTime, nullable=True)
+    last_login_at = Column(DateTime, nullable=True)
+    last_login_ip = Column(String, nullable=True)
+    require_password_change = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -124,6 +130,8 @@ class Log(Base):
     action = Column(String, nullable=False)
     case_id = Column(Integer, nullable=True)
     details = Column(Text, nullable=True)
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
 
 # DB Dependency
 def get_db():

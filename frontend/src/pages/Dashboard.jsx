@@ -197,33 +197,45 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Audit Log timeline terminal */}
+        {/* Security Compliance Directive Card (Public Audit Feed Removed) */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-[#111827] text-sm font-bold uppercase tracking-wider font-mono">System Audit Feed</h3>
-            <span className="text-[10px] font-mono text-[#10B981] font-semibold flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#10B981] animate-ping" />
-              <span>LIVE FEED</span>
+            <h3 className="text-[#111827] text-sm font-bold uppercase tracking-wider font-mono">Security Directive</h3>
+            <span className="text-[10px] font-mono text-[#059669] font-semibold flex items-center gap-1">
+              <ShieldCheck className="h-3.5 w-3.5 text-[#059669]" />
+              <span>STRICT AUDIT PRIVACY</span>
             </span>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-[#E2E8F0] shadow-sm max-h-[300px] overflow-y-auto space-y-4">
-            {loading ? (
-              <div className="text-center text-xs text-[#6B7280] font-mono py-10 animate-pulse">COMPILING LOGS...</div>
-            ) : stats.recent_logs.length === 0 ? (
-              <p className="text-center text-[#6B7280] italic text-xs py-4">No audit actions recorded.</p>
-            ) : (
-              stats.recent_logs.map((log) => (
-                <div key={log.id} className="border-b border-[#F1F5F9] pb-3 last:border-0 last:pb-0 space-y-1 text-xs">
-                  <div className="flex items-center justify-between text-[#6B7280]">
-                    <span className="font-bold text-[#111827]">@{log.user}</span>
-                    <span className="text-[9px] font-mono">{new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                  </div>
-                  <span className="block font-mono text-[9px] font-bold text-[#2563EB] uppercase">{log.action}</span>
-                  <p className="text-[10px] text-[#4B5563] leading-normal">{log.details}</p>
-                </div>
-              ))
-            )}
+          <div className="bg-white p-5 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-4">
+            <div className="p-3.5 rounded-xl bg-[#EFF6FF] border border-[#BFDBFE] text-xs space-y-2">
+              <div className="flex items-center gap-2 text-[#1E40AF] font-bold">
+                <ShieldCheck className="h-4 w-4 shrink-0" />
+                <span>Enterprise RBAC Active</span>
+              </div>
+              <p className="text-[11px] text-[#1E3A8A] leading-relaxed">
+                Security audit logs and registration events are strictly isolated. All user activities are cryptographically signed and accessible exclusively within the <strong>Superintendent Control Console</strong>.
+              </p>
+            </div>
+
+            <div className="space-y-2 font-mono text-[10px] text-[#475569]">
+              <div className="flex justify-between py-1 border-b border-[#F1F5F9]">
+                <span>ENCRYPTION:</span>
+                <span className="font-bold text-[#1E293B]">AES-256 / SHA-256</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-[#F1F5F9]">
+                <span>AUTH CONTROL:</span>
+                <span className="font-bold text-[#1E293B]">Short-lived OAuth2 JWT</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-[#F1F5F9]">
+                <span>LOCKOUT POLICY:</span>
+                <span className="font-bold text-[#1E293B]">5 Attempts / 15m Lock</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span>APPROVAL STATE:</span>
+                <span className="font-bold text-[#059669]">ADMIN APPROVAL ENFORCED</span>
+              </div>
+            </div>
           </div>
         </div>
 

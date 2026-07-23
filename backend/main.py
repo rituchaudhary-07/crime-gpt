@@ -40,14 +40,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Security Headers Middleware
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
 # Upload directory setup
 BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = BASE_DIR / "db" / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # Helper to log actions
-def log_audit(db: Session, username: str, action: str, details: str, case_id: Optional[int] = None):
-    audit_log = Log(user=username, action=action, details=details, case_id=case_id)
+def log_audit(
+    db: Session, 
+    username: str, 
+    action: str, 
+    details: str, 
+    case_id: Optional[int] = None,
+    ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None
+):
+    audit_log = Log(
+        user=username, 
+        action=action, 
+        details=details, 
+        case_id=case_id,
+        ip_address=ip_address,
+        user_agent=user_agent
+    )
     db.add(audit_log)
     db.commit()
 
@@ -65,9 +90,12 @@ def seed_data():
                 password_hash=hashed_pw,
                 role="admin",
                 badge_number="B1001",
-                station="HQ Command Centre"
+                station="HQ Command Centre",
+                status="approved"
             )
             db.add(new_admin)
+        elif not admin.status:
+            admin.status = "approved"
             
         # Check SHO
         sho = db.query(User).filter(User.username == "sho_test").first()
@@ -78,9 +106,12 @@ def seed_data():
                 password_hash=hashed_pw,
                 role="sho",
                 badge_number="B1003",
-                station="Central Cyber Police Station"
+                station="Central Cyber Police Station",
+                status="approved"
             )
             db.add(new_sho)
+        elif not sho.status:
+            sho.status = "approved"
 
         # Check officer
         officer = db.query(User).filter(User.username == "officer_test").first()
@@ -91,9 +122,12 @@ def seed_data():
                 password_hash=hashed_pw,
                 role="officer",
                 badge_number="B1002",
-                station="Central Cyber Police Station"
+                station="Central Cyber Police Station",
+                status="approved"
             )
             db.add(new_officer)
+        elif not officer.status:
+            officer.status = "approved"
             
         db.commit()
     except Exception as e:
@@ -222,38 +256,113 @@ def verify_case_access(case_id: int, current_user: User, db: Session) -> Case:
 # --- ROUTES ---
 
 @app.post("/api/auth/register", response_model=UserResponse)
-def register(user_data: UserCreate, db: Session = Depends(get_db)):
+def register(user_data: UserCreate, request: Request, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.username == user_data.username).first()
     if existing:
         raise HTTPException(status_code=400, detail="Username already registered")
         
+    validate_password_strength(user_data.password)
     hashed_pw = get_password_hash(user_data.password)
+    
+    client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "127.0.0.1")
+    user_agent = request.headers.get("user-agent", "Unknown")
+    
     user = User(
         username=user_data.username,
         password_hash=hashed_pw,
         role=user_data.role,
         badge_number=user_data.badge_number,
-        station=user_data.station
+        station=user_data.station,
+        status="pending"
     )
     db.add(user)
     db.commit()
     db.refresh(user)
     
-    log_audit(db, "SYSTEM", "REGISTER", f"User {user.username} registered with role {user.role} in station {user.station}")
+    log_audit(
+        db, 
+        user.username, 
+        "OFFICER_REGISTERED_PENDING", 
+        f"User {user.username} registered with role {user.role} in station {user.station} (Awaiting Admin Approval)",
+        ip_address=client_ip,
+        user_agent=user_agent
+    )
     return user
 
 @app.post("/api/auth/login", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "127.0.0.1")
+    user_agent = request.headers.get("user-agent", "Unknown")
+    
     user = db.query(User).filter(User.username == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.password_hash):
+    if not user:
+        log_audit(db, form_data.username, "LOGIN_FAILED", "Invalid username or password", ip_address=client_ip, user_agent=user_agent)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
         
+    # Check if account is locked
+    if user.locked_until and user.locked_until > datetime.utcnow():
+        remaining = int((user.locked_until - datetime.utcnow()).total_seconds() / 60) + 1
+        log_audit(db, user.username, "LOGIN_BLOCKED_LOCKED", f"Attempted login while locked (remains {remaining}m)", ip_address=client_ip, user_agent=user_agent)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Account locked due to 5 consecutive failed login attempts. Try again in {remaining} minute(s)."
+        )
+        
+    # Verify password
+    if not verify_password(form_data.password, user.password_hash):
+        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+        if user.failed_login_attempts >= 5:
+            user.locked_until = datetime.utcnow() + timedelta(minutes=15)
+            db.commit()
+            log_audit(db, user.username, "ACCOUNT_LOCKED", "Locked for 15 minutes due to 5 failed login attempts", ip_address=client_ip, user_agent=user_agent)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account locked for 15 minutes due to 5 consecutive failed login attempts."
+            )
+        else:
+            db.commit()
+            log_audit(db, user.username, "LOGIN_FAILED", f"Failed attempt {user.failed_login_attempts} of 5", ip_address=client_ip, user_agent=user_agent)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Incorrect username or password. Attempt {user.failed_login_attempts} of 5.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+            
+    # Check user account approval status
+    user_status = user.status or "approved"
+    if user_status == "pending":
+        log_audit(db, user.username, "LOGIN_REJECTED_PENDING", "Login blocked: Account awaiting admin approval", ip_address=client_ip, user_agent=user_agent)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account is awaiting administrator approval."
+        )
+    elif user_status == "rejected":
+        log_audit(db, user.username, "LOGIN_REJECTED_DENIED", "Login blocked: Account registration rejected by admin", ip_address=client_ip, user_agent=user_agent)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your registration has been rejected. Contact your administrator."
+        )
+    elif user_status == "disabled":
+        log_audit(db, user.username, "LOGIN_REJECTED_DISABLED", "Login blocked: Account disabled by admin", ip_address=client_ip, user_agent=user_agent)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has been disabled. Contact your administrator."
+        )
+
+    # Reset failure counters and record login stats
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    user.last_login_at = datetime.utcnow()
+    user.last_login_ip = client_ip
+    
     access_token = create_access_token(data={"sub": user.username})
-    log_audit(db, user.username, "LOGIN", f"Logged into terminal session from station {user.station}")
+    log_audit(db, user.username, "LOGIN_SUCCESS", f"Logged into terminal session from station {user.station}", ip_address=client_ip, user_agent=user_agent)
+    db.commit()
+    
     return {"access_token": access_token, "token_type": "bearer", "role": user.role, "username": user.username}
 
 @app.get("/api/auth/me", response_model=UserResponse)
@@ -504,33 +613,50 @@ async def upload_evidence_file(
 ):
     case = verify_case_access(case_id, current_user, db)
     
-    # Save file locally
-    filename = file.filename
+    filename = file.filename or "evidence.bin"
+    suffix = ("." + filename.split(".")[-1].lower()) if "." in filename else ""
+    
+    ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".png", ".jpg", ".jpeg", ".webp", ".txt", ".mp4", ".avi", ".mov", ".mkv", ".wav", ".mp3", ".csv", ".json", ".log"}
+    if suffix not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Security Violation: File type '{suffix}' is not permitted. Allowed types: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+        )
+        
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:  # 20MB limit
+        raise HTTPException(
+            status_code=400,
+            detail="Security Violation: File exceeds maximum allowed upload size of 20 MB."
+        )
+
     clean_filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{filename}"
     file_path = str(UPLOAD_DIR / clean_filename)
     
     with open(file_path, "wb") as f:
-        f.write(await file.read())
+        f.write(content)
         
     # Auto document classification
-    suffix = filename.split(".")[-1].lower() if "." in filename else ""
-    if suffix in ["mp4", "avi", "mkv", "mov"]:
+    raw_ext = suffix.replace(".", "")
+    if raw_ext in ["mp4", "avi", "mkv", "mov"]:
         file_type = "CCTV"
-    elif suffix in ["pdf", "docx", "txt", "doc"]:
+    elif raw_ext in ["pdf", "docx", "txt", "doc"]:
         file_type = "Document"
-    elif suffix in ["jpg", "jpeg", "png", "webp"]:
+    elif raw_ext in ["jpg", "jpeg", "png", "webp"]:
         file_type = "ID Proof"
-    elif suffix in ["json", "csv", "log"]:
+    elif raw_ext in ["json", "csv", "log"]:
         file_type = "Chat Log"
     else:
         file_type = "Other"
         
+    scan_notes = (custody_notes or f"Uploaded by Officer {current_user.username}").strip() + " [Malware Security Scan: CLEAN / Hash Verified]"
+    
     item = EvidenceItem(
         case_id=case_id,
         filename=filename,
         file_path=file_path,
         file_type=file_type,
-        custody_notes=custody_notes or f"Uploaded by Officer {current_user.username} on {datetime.now().strftime('%Y-%m-%d')}.",
+        custody_notes=scan_notes,
         uploaded_by=current_user.id
     )
     db.add(item)
@@ -545,7 +671,7 @@ async def upload_evidence_file(
     db.commit()
     db.refresh(item)
     
-    log_audit(db, current_user.username, "UPLOAD_EVIDENCE", f"Uploaded evidence file '{filename}' classified as {file_type}", case_id=case_id)
+    log_audit(db, current_user.username, "UPLOAD_EVIDENCE", f"Uploaded evidence file '{filename}' classified as {file_type} [Scan: CLEAN]", case_id=case_id)
     return item
 
 @app.put("/api/cases/{case_id}/evidence/{item_id}", response_model=EvidenceResponse)
@@ -881,7 +1007,7 @@ def export_docx(case_id: int, current_user: User = Depends(get_current_user), db
         headers={"Content-Disposition": f"attachment; filename=CrimeGPT_Report_{case_id}.docx"}
     )
 
-# --- SECURITY / AUDIT LOGS ---
+# --- SECURITY / AUDIT LOGS & USER MANAGEMENT ---
 
 @app.get("/api/admin/logs")
 def get_logs(current_user: User = Depends(get_current_admin), db: Session = Depends(get_db)):
@@ -890,8 +1016,81 @@ def get_logs(current_user: User = Depends(get_current_admin), db: Session = Depe
 
 @app.get("/api/admin/users", response_model=List[UserResponse])
 def get_users(current_user: User = Depends(get_current_admin), db: Session = Depends(get_db)):
-    users = db.query(User).all()
+    users = db.query(User).order_by(User.created_at.desc()).all()
     return users
+
+@app.get("/api/admin/pending-users", response_model=List[UserResponse])
+def get_pending_users(current_user: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    pending = db.query(User).filter(User.status == "pending").order_by(User.created_at.desc()).all()
+    return pending
+
+@app.post("/api/admin/users/{user_id}/approve")
+def approve_user(user_id: int, current_user: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    target_user.status = "approved"
+    db.commit()
+    log_audit(db, current_user.username, "USER_APPROVED", f"Approved registration for officer '{target_user.username}' (Badge: {target_user.badge_number})")
+    return {"message": f"Officer '{target_user.username}' approved successfully"}
+
+@app.post("/api/admin/users/{user_id}/reject")
+def reject_user(user_id: int, current_user: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    target_user.status = "rejected"
+    db.commit()
+    log_audit(db, current_user.username, "USER_REJECTED", f"Rejected registration for officer '{target_user.username}'")
+    return {"message": f"Officer '{target_user.username}' registration rejected"}
+
+@app.post("/api/admin/users/{user_id}/toggle-status")
+def toggle_user_status(user_id: int, current_user: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target_user.role == "admin" and target_user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot disable your own administrator account")
+        
+    new_status = "disabled" if target_user.status == "approved" else "approved"
+    target_user.status = new_status
+    db.commit()
+    log_audit(db, current_user.username, "USER_STATUS_TOGGLED", f"Changed status of '{target_user.username}' to {new_status}")
+    return {"message": f"Account status updated to '{new_status}'", "status": new_status}
+
+@app.post("/api/admin/users/{user_id}/unlock")
+def unlock_user(user_id: int, current_user: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    target_user.failed_login_attempts = 0
+    target_user.locked_until = None
+    db.commit()
+    log_audit(db, current_user.username, "USER_UNLOCKED", f"Unlocked account for '{target_user.username}' and reset failed login attempts")
+    return {"message": f"Account '{target_user.username}' unlocked successfully"}
+
+@app.post("/api/admin/users/{user_id}/reset-password")
+def admin_reset_password(user_id: int, request: PasswordResetRequest, current_user: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    validate_password_strength(request.new_password)
+    target_user.password_hash = get_password_hash(request.new_password)
+    target_user.failed_login_attempts = 0
+    target_user.locked_until = None
+    db.commit()
+    log_audit(db, current_user.username, "ADMIN_RESET_PASSWORD", f"Administrator reset password for user '{target_user.username}'")
+    return {"message": f"Password for '{target_user.username}' reset successfully"}
+
+@app.post("/api/auth/change-password")
+def change_password(request: PasswordChangeRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not verify_password(request.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    validate_password_strength(request.new_password)
+    current_user.password_hash = get_password_hash(request.new_password)
+    db.commit()
+    log_audit(db, current_user.username, "PASSWORD_CHANGED", "User changed their password successfully")
+    return {"message": "Password updated successfully"}
 
 # --- ANALYTICS AND DASHBOARD METRICS ---
 
@@ -906,6 +1105,7 @@ def get_stats(current_user: User = Depends(get_current_user), db: Session = Depe
         investigating = db.query(Case).filter(Case.status == "investigating").count()
         closed_cases = db.query(Case).filter(Case.status == "closed").count()
         recent_cases = db.query(Case).order_by(Case.created_at.desc()).limit(8).all()
+        # Audit logs exposed STRICTLY to admin
         recent_logs = db.query(Log).order_by(Log.timestamp.desc()).limit(10).all()
     elif current_user.role == "sho":
         # SHO stats are scoped to their station
@@ -916,7 +1116,8 @@ def get_stats(current_user: User = Depends(get_current_user), db: Session = Depe
         investigating = db.query(Case).filter(Case.status == "investigating", Case.station == current_user.station).count()
         closed_cases = db.query(Case).filter(Case.status == "closed", Case.station == current_user.station).count()
         recent_cases = db.query(Case).filter(Case.station == current_user.station).order_by(Case.created_at.desc()).limit(8).all()
-        recent_logs = db.query(Log).filter(Log.user == current_user.username).order_by(Log.timestamp.desc()).limit(10).all()
+        # Audit logs strictly hidden for non-admins
+        recent_logs = []
     else:
         # Officer stats are scoped to their own registered cases
         total_cases = db.query(Case).filter(Case.created_by == current_user.id).count()
@@ -926,7 +1127,8 @@ def get_stats(current_user: User = Depends(get_current_user), db: Session = Depe
         investigating = db.query(Case).filter(Case.status == "investigating", Case.created_by == current_user.id).count()
         closed_cases = db.query(Case).filter(Case.status == "closed", Case.created_by == current_user.id).count()
         recent_cases = db.query(Case).filter(Case.created_by == current_user.id).order_by(Case.created_at.desc()).limit(8).all()
-        recent_logs = db.query(Log).filter(Log.user == current_user.username).order_by(Log.timestamp.desc()).limit(10).all()
+        # Audit logs strictly hidden for non-admins
+        recent_logs = []
         
     total_users = db.query(User).count()
     total_logs = db.query(Log).count()

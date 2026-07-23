@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Shield, Key, User, Award, ArrowRight, AlertCircle } from "lucide-react";
 import { api } from "../utils/api";
 
+import PasswordStrengthMeter from "../components/PasswordStrengthMeter";
+
 export default function Login() {
   const navigate = useNavigate();
   const [isRegister, setIsRegister] = useState(false);
@@ -27,7 +29,7 @@ export default function Login() {
     try {
       if (isRegister) {
         await api.register(username, password, badgeNumber, role);
-        setSuccess("Officer registered successfully! Proceed to sign in.");
+        setSuccess("Officer account registered! Your account status is PENDING administrator approval. An admin must approve your account before you can sign in.");
         setIsRegister(false);
         setPassword("");
       } else {
@@ -56,22 +58,28 @@ export default function Login() {
               {isRegister ? "Register Officer Account" : "Officer Session Sign In"}
             </h2>
             <p className="text-xs text-[#6B7280]">
-              {isRegister ? "Register system credentials below" : "Enter badge details to access court files"}
+              {isRegister ? "Register official credentials (Requires Admin Approval)" : "Enter badge details to access court files"}
             </p>
           </div>
         </div>
 
         {/* Status Alerts */}
         {error && (
-          <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-650 text-xs flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{error}</span>
+          <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2.5">
+            <AlertCircle className="h-4 w-4 shrink-0 text-red-600 mt-0.5" />
+            <div className="leading-snug">
+              <span className="font-bold block">Access Denied</span>
+              <span>{error}</span>
+            </div>
           </div>
         )}
         {success && (
-          <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-650 text-xs flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{success}</span>
+          <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-start gap-2.5">
+            <Shield className="h-4 w-4 shrink-0 text-emerald-600 mt-0.5" />
+            <div className="leading-snug">
+              <span className="font-bold block">Registration Submitted</span>
+              <span>{success}</span>
+            </div>
           </div>
         )}
 
@@ -103,13 +111,16 @@ export default function Login() {
               <input
                 type="password"
                 required
-                placeholder="••••••••"
+                placeholder="••••••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full saas-input pl-9 pr-4 py-2.5"
               />
             </div>
           </div>
+
+          {/* Password Strength Meter */}
+          {isRegister && <PasswordStrengthMeter password={password} />}
 
           {isRegister && (
             <>
@@ -138,7 +149,7 @@ export default function Login() {
                   className="w-full saas-input px-3.5 py-2.5 cursor-pointer"
                 >
                   <option value="officer">Investigating Officer</option>
-                  <option value="admin">Superintendent / Admin</option>
+                  <option value="sho">Station House Officer (SHO)</option>
                 </select>
               </div>
             </>

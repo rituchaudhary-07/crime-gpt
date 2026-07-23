@@ -243,7 +243,14 @@ export const api = {
       headers: getHeaders(),
       body: JSON.stringify({ message, custom_key: customKey })
     });
-    if (!response.ok) throw new Error("Assistant Q&A failed");
+    if (!response.ok) {
+      let errMsg = "Assistant Q&A failed";
+      try {
+        const errData = await response.json();
+        errMsg = errData.detail || errMsg;
+      } catch (e) {}
+      throw new Error(`${errMsg} (HTTP ${response.status})`);
+    }
     return response.json();
   },
 
@@ -361,6 +368,89 @@ export const api = {
       headers: getHeaders()
     });
     if (!response.ok) throw new Error("Failed to load users list");
+    return response.json();
+  },
+
+  getPendingUsers: async () => {
+    const response = await fetch(`${API_BASE_URL}/admin/pending-users`, {
+      method: "GET",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to load pending registrations");
+    return response.json();
+  },
+
+  approveUser: async (userId) => {
+    const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/approve`, {
+      method: "POST",
+      headers: getHeaders()
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || "Failed to approve user");
+    }
+    return response.json();
+  },
+
+  rejectUser: async (userId) => {
+    const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/reject`, {
+      method: "POST",
+      headers: getHeaders()
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || "Failed to reject user");
+    }
+    return response.json();
+  },
+
+  toggleUserStatus: async (userId) => {
+    const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/toggle-status`, {
+      method: "POST",
+      headers: getHeaders()
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || "Failed to toggle user status");
+    }
+    return response.json();
+  },
+
+  unlockUser: async (userId) => {
+    const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/unlock`, {
+      method: "POST",
+      headers: getHeaders()
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || "Failed to unlock user account");
+    }
+    return response.json();
+  },
+
+  adminResetPassword: async (userId, newPassword) => {
+    const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/reset-password`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ new_password: newPassword })
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || "Password reset failed");
+    }
+    return response.json();
+  },
+
+  changePassword: async (currentPassword, newPassword) => {
+    const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || "Password change failed");
+    }
     return response.json();
   }
 };
