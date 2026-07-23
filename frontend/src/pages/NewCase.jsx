@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   FilePlus, User, ShieldAlert, ClipboardList, 
-  Users, CheckCircle2, ChevronRight, ChevronLeft, Sparkles, AlertCircle
+  Users, CheckCircle2, ChevronRight, ChevronLeft, Sparkles, AlertCircle,
+  Clock, Calendar, Zap
 } from "lucide-react";
 import { api } from "../utils/api";
 
@@ -35,6 +36,34 @@ export default function NewCase() {
     witness_details: "",
     witness_contact: ""
   });
+
+  const handleQuickDate = (type) => {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    
+    if (type === "now") {
+      const year = now.getFullYear();
+      const month = pad(now.getMonth() + 1);
+      const day = pad(now.getDate());
+      const hours = now.getHours();
+      const mins = pad(now.getMinutes());
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      const formattedHours = pad(hours % 12 || 12);
+      handleInputChange("date", `${year}-${month}-${day} ${formattedHours}:${mins} ${ampm}`);
+    } else if (type === "today_morning") {
+      const year = now.getFullYear();
+      const month = pad(now.getMonth() + 1);
+      const day = pad(now.getDate());
+      handleInputChange("date", `${year}-${month}-${day} 09:00 AM`);
+    } else if (type === "yesterday") {
+      const yest = new Date(now);
+      yest.setDate(yest.getDate() - 1);
+      const year = yest.getFullYear();
+      const month = pad(yest.getMonth() + 1);
+      const day = pad(yest.getDate());
+      handleInputChange("date", `${year}-${month}-${day} 08:00 PM`);
+    }
+  };
 
   const steps = [
     { number: 1, label: "Incident Details", icon: <FilePlus className="h-4 w-4" /> },
@@ -185,14 +214,68 @@ Contacts: ${formData.witness_contact || "N/A"}`;
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[11px] font-semibold text-[#4B5563] mb-1">INCIDENT DATE/TIME</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 2026-07-22 03:00 AM"
-                    value={formData.date}
-                    onChange={(e) => handleInputChange("date", e.target.value)}
-                    className="w-full saas-input px-3.5 py-2.5"
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-semibold text-[#4B5563]">INCIDENT DATE/TIME</label>
+                  </div>
+
+                  <div className="relative flex items-center">
+                    <input
+                      type="text"
+                      placeholder="e.g. 2026-07-22 03:00 AM"
+                      value={formData.date}
+                      onChange={(e) => handleInputChange("date", e.target.value)}
+                      className="w-full saas-input pl-3.5 pr-9 py-2.5"
+                    />
+                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                      <input
+                        type="datetime-local"
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            const d = new Date(e.target.value);
+                            const pad = (n) => String(n).padStart(2, '0');
+                            const year = d.getFullYear();
+                            const month = pad(d.getMonth() + 1);
+                            const day = pad(d.getDate());
+                            const hours = d.getHours();
+                            const mins = pad(d.getMinutes());
+                            const ampm = hours >= 12 ? 'PM' : 'AM';
+                            const formattedHours = pad(hours % 12 || 12);
+                            handleInputChange("date", `${year}-${month}-${day} ${formattedHours}:${mins} ${ampm}`);
+                          }
+                        }}
+                        className="w-6 h-6 opacity-0 cursor-pointer absolute right-0 z-10"
+                        title="Pick Date and Time from Calendar"
+                      />
+                      <Calendar className="h-4 w-4 text-[#2563EB] cursor-pointer" />
+                    </div>
+                  </div>
+
+                  {/* Quick Shortcut Buttons */}
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                    <span className="text-[9px] font-mono font-bold text-[#64748B] uppercase">SHORTCUTS:</span>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickDate("now")}
+                      className="px-2 py-0.5 rounded-md bg-[#EFF6FF] text-[#2563EB] border border-[#BFDBFE] hover:bg-[#DBEAFE] font-bold text-[10px] cursor-pointer transition-all flex items-center gap-1"
+                    >
+                      <Zap className="h-2.5 w-2.5 text-[#2563EB]" />
+                      <span>Set Current Time</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickDate("today_morning")}
+                      className="px-2 py-0.5 rounded-md bg-[#F8FAFC] text-[#475569] border border-[#E2E8F0] hover:bg-[#F1F5F9] font-medium text-[10px] cursor-pointer transition-all"
+                    >
+                      Today 09:00 AM
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickDate("yesterday")}
+                      className="px-2 py-0.5 rounded-md bg-[#F8FAFC] text-[#475569] border border-[#E2E8F0] hover:bg-[#F1F5F9] font-medium text-[10px] cursor-pointer transition-all"
+                    >
+                      Yesterday 08:00 PM
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-[#4B5563] mb-1">JURISDICTION PLACE / AREA</label>
