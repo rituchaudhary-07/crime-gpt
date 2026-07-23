@@ -76,9 +76,9 @@ class AIService:
                 
                 # Check models fallback chain
                 models_to_try = [
-                    "deepseek/deepseek-chat-v3",
+                    "deepseek/deepseek-chat",
                     "meta-llama/llama-3.3-70b-instruct",
-                    "qwen/qwen3-32b"
+                    "deepseek/deepseek-r1"
                 ]
                 
                 last_error = None
