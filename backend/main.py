@@ -320,6 +320,13 @@ class CreateSessionRequest(BaseModel):
 class RenameSessionRequest(BaseModel):
     title: str
 
+class PasswordResetRequest(BaseModel):
+    new_password: str
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
 class KeyValidateRequest(BaseModel):
     api_key: str
 

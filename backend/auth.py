@@ -2,7 +2,15 @@ from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+try:
+    from jose import JWTError, jwt
+except ImportError:
+    import jwt
+    try:
+        from jwt.exceptions import PyJWTError as JWTError
+    except ImportError:
+        class JWTError(Exception):
+            pass
 import bcrypt
 import re
 from sqlalchemy.orm import Session
