@@ -146,10 +146,14 @@ export default function AIAssistant() {
         localStorage.setItem("crimegpt_active_session", newSessionId);
       }
 
-      // Re-fetch chat sessions from backend to immediately populate the left sidebar!
-      const updatedSessions = await api.getChatSessions();
-      if (Array.isArray(updatedSessions)) {
-        setSessions(updatedSessions);
+      // Safely re-fetch chat sessions for left sidebar without affecting chat feed
+      try {
+        const updatedSessions = await api.getChatSessions();
+        if (Array.isArray(updatedSessions)) {
+          setSessions(updatedSessions);
+        }
+      } catch (sidebarErr) {
+        console.log("Sidebar refresh warning:", sidebarErr);
       }
     } catch (err) {
       const errorMsg = { 

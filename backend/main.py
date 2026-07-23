@@ -1115,38 +1115,45 @@ def get_conversations(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    sessions = db.query(ChatSession).filter(ChatSession.user_id == current_user.id).order_by(ChatSession.updated_at.desc()).all()
-    
-    now = datetime.utcnow()
-    today_start = datetime(now.year, now.month, now.day)
-    yesterday_start = today_start - timedelta(days=1)
-    
-    result = []
-    for s in sessions:
-        updated_dt = s.updated_at or s.created_at
-        if updated_dt >= today_start:
-            group = "Today"
-        elif updated_dt >= yesterday_start:
-            group = "Yesterday"
-        else:
-            group = "Older"
+    try:
+        sessions = db.query(ChatSession).filter(ChatSession.user_id == current_user.id).order_by(ChatSession.updated_at.desc()).all()
+        
+        now = datetime.utcnow()
+        today_start = datetime(now.year, now.month, now.day)
+        yesterday_start = today_start - timedelta(days=1)
+        
+        result = []
+        for s in sessions:
+            updated_dt = s.updated_at or s.created_at or datetime.utcnow()
+            if updated_dt >= today_start:
+                group = "Today"
+            elif updated_dt >= yesterday_start:
+                group = "Yesterday"
+            else:
+                group = "Older"
+                
+            last_msg = db.query(ChatMessage).filter(ChatMessage.session_id == s.session_id).order_by(ChatMessage.timestamp.desc()).first()
+            last_preview = last_msg.content[:60] + ("..." if len(last_msg.content) > 60 else "") if last_msg else ""
             
-        last_msg = db.query(ChatMessage).filter(ChatMessage.session_id == s.session_id).order_by(ChatMessage.timestamp.desc()).first()
-        last_preview = last_msg.content[:60] + ("..." if len(last_msg.content) > 60 else "") if last_msg else ""
-        
-        result.append({
-            "_id": s.session_id,
-            "id": s.session_id,
-            "session_id": s.session_id,
-            "userId": s.user_id,
-            "title": s.title,
-            "group": group,
-            "lastMessagePreview": last_preview,
-            "createdAt": s.created_at.isoformat() if hasattr(s.created_at, 'isoformat') else str(s.created_at),
-            "updatedAt": s.updated_at.isoformat() if hasattr(s.updated_at, 'isoformat') else str(s.updated_at)
-        })
-        
-    return result
+            created_str = s.created_at.isoformat() if (s.created_at and hasattr(s.created_at, 'isoformat')) else str(s.created_at or datetime.utcnow().isoformat())
+            updated_str = s.updated_at.isoformat() if (s.updated_at and hasattr(s.updated_at, 'isoformat')) else str(s.updated_at or datetime.utcnow().isoformat())
+
+            result.append({
+                "_id": s.session_id,
+                "id": s.session_id,
+                "session_id": s.session_id,
+                "userId": s.user_id,
+                "title": s.title,
+                "group": group,
+                "lastMessagePreview": last_preview,
+                "createdAt": created_str,
+                "updatedAt": updated_str
+            })
+            
+        return result
+    except Exception as e:
+        print("Error fetching conversations:", e)
+        return []
 
 @app.post("/api/conversations")
 @app.post("/api/chat/sessions")
