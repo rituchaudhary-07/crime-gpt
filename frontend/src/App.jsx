@@ -31,17 +31,79 @@ function Layout({ children }) {
   const [username, setUsername] = useState("");
   const [role, setRole] = useState("");
   
+  // Notification State
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  // Global Search State
+  const [globalQuery, setGlobalQuery] = useState("");
+  const [globalResults, setGlobalResults] = useState(null);
+  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+
   useEffect(() => {
     if (isAuthenticated) {
       setUsername(api.getUsername());
       setRole(api.getUserRole());
+      loadNotifications();
     }
   }, [isAuthenticated, location.pathname]);
+
+  // Session Inactivity Timeout (15 minutes = 900,000 ms)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let timeoutId;
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        alert("Session expired due to 15 minutes of inactivity. Please sign in again.");
+        handleLogout();
+      }, 15 * 60 * 1000);
+    };
+
+    window.addEventListener("mousemove", resetTimer);
+    window.addEventListener("keydown", resetTimer);
+    window.addEventListener("click", resetTimer);
+    resetTimer();
+
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener("mousemove", resetTimer);
+      window.removeEventListener("keydown", resetTimer);
+      window.removeEventListener("click", resetTimer);
+    };
+  }, [isAuthenticated]);
+
+  const loadNotifications = async () => {
+    try {
+      const data = await api.getNotifications();
+      setNotifications(data);
+    } catch (err) {
+      console.log("Failed loading notifications:", err);
+    }
+  };
 
   const handleLogout = () => {
     api.logout();
     navigate("/login");
   };
+
+  const handleGlobalSearch = async (e) => {
+    if (e) e.preventDefault();
+    if (!globalQuery.trim()) return;
+    setShowSearchModal(true);
+    setSearchLoading(true);
+    try {
+      const res = await api.globalSearch(globalQuery);
+      setGlobalResults(res);
+    } catch (err) {
+      console.log("Global search failed:", err);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: <LayoutDashboard className="h-4.5 w-4.5" /> },
@@ -147,16 +209,18 @@ function Layout({ children }) {
         <header className="h-16 bg-white border-b border-[#E2E8F0] px-8 flex items-center justify-between sticky top-0 z-10">
           
           {/* Header Global Search Input */}
-          <div className="relative w-80">
+          <form onSubmit={handleGlobalSearch} className="relative w-80">
             <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-[#9CA3AF]">
               <Search className="h-4 w-4" />
             </span>
             <input
               type="text"
-              placeholder="Search sections, FIR numbers, case files..."
+              placeholder="Search Cases, FIRs, Officers, Sections... (Press Enter)"
+              value={globalQuery}
+              onChange={(e) => setGlobalQuery(e.target.value)}
               className="w-full saas-input pl-9 pr-4 py-2 text-xs"
             />
-          </div>
+          </form>
 
           {/* Header Actions */}
           <div className="flex items-center gap-5">
@@ -166,11 +230,61 @@ function Layout({ children }) {
               <span>{todayDate}</span>
             </div>
 
-            {/* Notification Bell */}
-            <button className="p-2 rounded-xl text-[#6B7280] hover:text-[#111827] hover:bg-[#F8FAFC] border border-transparent hover:border-[#E2E8F0] transition-all relative cursor-pointer">
-              <Bell className="h-4 w-4" />
-              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-[#EF4444] border-2 border-white" />
-            </button>
+            {/* Notification Bell & Dropdown */}
+            <div className="relative">
+              <button 
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="p-2 rounded-xl text-[#6B7280] hover:text-[#111827] hover:bg-[#F8FAFC] border border-transparent hover:border-[#E2E8F0] transition-all relative cursor-pointer"
+              >
+                <Bell className="h-4 w-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 h-4 min-w-4 px-1 rounded-full bg-[#EF4444] text-white text-[9px] font-mono font-bold flex items-center justify-center border-2 border-white">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Notification Popover Dropdown */}
+              {showNotifications && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl z-50 overflow-hidden animate-slide-down">
+                  <div className="p-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-900 font-mono uppercase">System Alert Notifications</span>
+                    <button
+                      onClick={async () => {
+                        await api.markAllNotificationsRead();
+                        loadNotifications();
+                      }}
+                      className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
+                    >
+                      Mark All Read
+                    </button>
+                  </div>
+
+                  <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 text-xs">
+                    {notifications.length === 0 ? (
+                      <div className="p-6 text-center text-slate-400 text-[11px] italic">No notifications</div>
+                    ) : (
+                      notifications.map((n) => (
+                        <div
+                          key={n.id}
+                          onClick={async () => {
+                            await api.markNotificationRead(n.id);
+                            loadNotifications();
+                          }}
+                          className={`p-3.5 hover:bg-slate-50 cursor-pointer transition-colors ${!n.read ? 'bg-blue-50/50' : ''}`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-bold text-slate-900 text-[11px]">{n.title}</span>
+                            <span className="text-[9px] font-mono text-slate-400">{new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 leading-snug">{n.message}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Global API State Indicator */}
             <div className="flex items-center gap-2 text-xs font-semibold text-[#6B7280]">
@@ -197,9 +311,86 @@ function Layout({ children }) {
         </main>
 
       </div>
+
+      {/* Global Search Modal */}
+      {showSearchModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white p-6 rounded-2xl max-w-2xl w-full space-y-4 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <span className="text-[10px] font-mono font-bold text-blue-600 uppercase">ADVANCED GLOBAL POLICE SYSTEM SEARCH</span>
+                <h3 className="text-sm font-bold text-slate-900">Search Results for "{globalQuery}"</h3>
+              </div>
+              <button onClick={() => setShowSearchModal(false)} className="text-slate-400 hover:text-slate-700 font-bold p-1">✕</button>
+            </div>
+
+            {searchLoading ? (
+              <div className="text-center py-12 text-xs font-mono text-slate-400 animate-pulse">SEARCHING POLICE DATABASE...</div>
+            ) : !globalResults ? (
+              <div className="text-center py-8 text-xs text-slate-500">No results returned.</div>
+            ) : (
+              <div className="space-y-4 text-xs max-h-96 overflow-y-auto pr-1">
+                {/* Cases Match */}
+                {globalResults.cases && globalResults.cases.length > 0 && (
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-mono font-bold text-slate-500 uppercase block">Matching Case Dossiers ({globalResults.cases.length})</span>
+                    <div className="grid gap-2">
+                      {globalResults.cases.map(c => (
+                        <div key={c.id} onClick={() => { setShowSearchModal(false); navigate(`/fir-generator?caseId=${c.id}`); }} className="p-3 bg-slate-50 rounded-xl border border-slate-200 hover:bg-blue-50/50 cursor-pointer flex justify-between items-center">
+                          <div>
+                            <span className="font-bold text-slate-900 block">#{c.id} - {c.title}</span>
+                            <span className="text-[10px] text-slate-500">{c.location} • Status: {c.status}</span>
+                          </div>
+                          <span className="text-[10px] font-bold text-blue-600">View Dossier &rarr;</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Officers Match */}
+                {globalResults.officers && globalResults.officers.length > 0 && (
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-mono font-bold text-slate-500 uppercase block">Matching Officers ({globalResults.officers.length})</span>
+                    <div className="grid gap-2">
+                      {globalResults.officers.map(o => (
+                        <div key={o.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                          <span className="font-bold text-slate-900 block">@{o.username} ({o.badge_number || 'Officer'})</span>
+                          <span className="text-[10px] text-slate-500">{o.station} • Role: {o.role}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Legal Sections Match */}
+                {globalResults.sections && globalResults.sections.length > 0 && (
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-mono font-bold text-slate-500 uppercase block">Matching Legal Code Provisions ({globalResults.sections.length})</span>
+                    <div className="grid gap-2">
+                      {globalResults.sections.map(s => (
+                        <div key={s.id} onClick={() => { setShowSearchModal(false); navigate("/legal-search"); }} className="p-3 bg-slate-50 rounded-xl border border-slate-200 hover:bg-blue-50/50 cursor-pointer">
+                          <span className="font-bold text-blue-600 block">{s.act} Section {s.section_number}: {s.title}</span>
+                          <span className="text-[10px] text-slate-600 block mt-1">{s.description}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {(!globalResults.cases?.length && !globalResults.officers?.length && !globalResults.sections?.length) && (
+                  <div className="text-center py-8 text-xs text-slate-500 italic">No records matched search term '{globalQuery}'.</div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
+
 
 // Guard for authenticated pages
 function PrivateRoute({ children }) {

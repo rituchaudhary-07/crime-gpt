@@ -57,28 +57,12 @@ export default function History() {
     }
   };
 
-  const handleExportChat = (chat) => {
-    const textContent = `CRIMEGPT LEGAL INTELLIGENCE SYSTEM - CHAT TRANSCRIPT
-==================================================
-Timestamp  : ${new Date(chat.created_at).toLocaleString()}
-Officer    : @${currentUsername}
-Chat Type  : ${chat.message_type || 'General Q&A'}
-Case ID    : ${chat.case_id ? `#${chat.case_id}` : 'General Assistant'}
-==================================================
-
-OFFICER QUERY:
-${chat.user_message}
-
-AI ASSISTANT RESPONSE:
-${chat.bot_response}
-`;
-    const element = document.createElement("a");
-    const file = new Blob([textContent], { type: "text/plain" });
-    element.href = URL.createObjectURL(file);
-    element.download = `CrimeGPT_Chat_${chat.id}_${new Date().toISOString().slice(0, 10)}.txt`;
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
+  const handleExportPDF = (chat) => {
+    const formattedMessages = [
+      { role: "user", content: chat.user_message, timestamp: new Date(chat.created_at).toLocaleString() },
+      { role: "assistant", content: chat.bot_response, timestamp: new Date(chat.created_at).toLocaleString() }
+    ];
+    api.exportChatPDF(formattedMessages, chat.case_id ? `Case #${chat.case_id}` : "General Legal Consultation");
   };
 
   // Filter and Sort Chat Sessions
@@ -219,10 +203,14 @@ ${chat.bot_response}
             <div className="text-center py-16 text-xs font-semibold text-[#6B7280] animate-pulse">LOADING CHAT TRANSCRIPTS...</div>
           ) : filteredChats.length === 0 ? (
             <div className="bg-white p-16 rounded-2xl border border-[#E2E8F0] text-center text-xs text-[#6B7280] space-y-3">
-              <MessageSquare className="h-10 w-10 text-[#CBD5E1] mx-auto" />
+              <div className="h-12 w-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+                <MessageSquare className="h-6 w-6" />
+              </div>
               <div className="space-y-1">
-                <p className="font-bold text-[#111827]">No Chat Logs Found</p>
-                <p className="text-[#64748B]">You have no saved legal Q&A sessions matching the current search parameters.</p>
+                <p className="font-bold text-slate-900 text-sm">No Saved Conversation History</p>
+                <p className="text-slate-500 max-w-sm mx-auto">
+                  You have not performed any AI assistant inquiries yet matching your query. Ask questions in the AI Assistant module to start logging transcripts.
+                </p>
               </div>
             </div>
           ) : (
@@ -235,15 +223,18 @@ ${chat.bot_response}
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-[#111827] flex items-center gap-1">
                         <User className="h-3.5 w-3.5 text-[#2563EB]" />
-                        <span>@{currentUsername}</span>
+                        <span>Officer: @{currentUsername}</span>
                       </span>
                       <span className="text-[#94A3B8]">•</span>
                       <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE] uppercase font-mono">
                         {chat.message_type === 'sop' ? 'SOP Guidance' : 'General Legal Q&A'}
                       </span>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border bg-slate-100 text-slate-700 border-slate-300 font-mono">
+                        Messages: 2
+                      </span>
                       {chat.case_id && (
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border bg-[#F5F3FF] text-[#7C3AED] border-[#DDD6FE] font-mono">
-                          Case #{chat.case_id}
+                          Case Number #{chat.case_id}
                         </span>
                       )}
                     </div>
@@ -272,11 +263,18 @@ ${chat.bot_response}
                     <span className="text-[10px] font-mono text-[#94A3B8]">TRANSCRIPT ID: #{chat.id}</span>
                     <div className="flex items-center gap-2">
                       <button
+                        onClick={() => handleExportPDF(chat)}
+                        className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer flex items-center gap-1.5 transition-all shadow-xs"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        <span>Export PDF</span>
+                      </button>
+                      <button
                         onClick={() => handleExportChat(chat)}
                         className="px-3 py-1.5 rounded-lg bg-white border border-[#CBD5E1] text-[#334155] hover:bg-[#F8FAFC] font-semibold text-xs cursor-pointer flex items-center gap-1.5 transition-all shadow-xs"
                       >
                         <Download className="h-3.5 w-3.5 text-[#2563EB]" />
-                        <span>Export Chat (.txt)</span>
+                        <span>Export TXT</span>
                       </button>
                       <button
                         onClick={() => handleDeleteChat(chat.id)}
@@ -349,3 +347,4 @@ ${chat.bot_response}
     </div>
   );
 }
+

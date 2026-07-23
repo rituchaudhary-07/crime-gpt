@@ -49,6 +49,18 @@ export default function Admin() {
     }
   };
 
+  const handleSuspend = async (userId, username) => {
+    if (!window.confirm(`Are you sure you want to suspend account access for officer '${username}'?`)) return;
+    setActionMsg({ type: "", text: "" });
+    try {
+      await api.updateOfficerStatus(userId, "suspended");
+      setActionMsg({ type: "success", text: `Officer '${username}' account has been suspended.` });
+      loadAdminData();
+    } catch (err) {
+      setActionMsg({ type: "error", text: err.message });
+    }
+  };
+
   const handleApprove = async (userId, username) => {
     setActionMsg({ type: "", text: "" });
     try {
@@ -113,7 +125,14 @@ export default function Admin() {
     e.preventDefault();
     setActionMsg({ type: "", text: "" });
     try {
-      await api.register(newUsername, newPassword, newBadge, newRole);
+      await api.register({
+        username: newUsername,
+        password: newPassword,
+        badge_number: newBadge,
+        role: newRole,
+        email: `${newUsername}@police.gov.in`,
+        phone: "9876543210"
+      });
       setActionMsg({ type: "success", text: `Officer account '${newUsername}' submitted. (Status: PENDING approval)` });
       setNewUsername("");
       setNewPassword("");
@@ -126,7 +145,7 @@ export default function Admin() {
   };
 
   const getLogBadge = (action) => {
-    if (action.includes("LOCKED") || action.includes("REJECTED") || action.includes("DELETE")) {
+    if (action.includes("LOCKED") || action.includes("REJECTED") || action.includes("DELETE") || action.includes("SUSPENDED")) {
       return "bg-rose-50 text-rose-700 border-rose-200";
     }
     if (action.includes("APPROVED") || action.includes("SUCCESS") || action.includes("REGISTER")) {
@@ -148,15 +167,14 @@ export default function Admin() {
             <span className="text-[10px] font-mono font-bold uppercase text-[#059669] tracking-wider">RESTRICTED SUPERINTENDENT COMMAND PORTAL</span>
           </div>
           <h1 className="text-xl font-bold tracking-tight text-[#111827] mt-1">Superintendent Security & Control Console</h1>
-          <p className="text-xs text-[#6B7280]">Review pending officer approvals, manage access credentials, and audit security compliance logs.</p>
+          <p className="text-xs text-[#6B7280]">Manage officer account approvals, role permissions, account locks, and security compliance audit trails.</p>
         </div>
 
         <button
           onClick={loadAdminData}
-          disabled={loading}
-          className="saas-card saas-card-hover px-4 py-2.5 flex items-center gap-2 text-xs font-semibold text-[#1E293B] cursor-pointer"
+          className="btn-secondary text-xs px-3.5 py-2.5 flex items-center gap-2 self-start md:self-auto cursor-pointer"
         >
-          <RefreshCw className={`h-4 w-4 text-[#2563EB] ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           <span>Reload Security Feeds</span>
         </button>
       </div>
@@ -296,7 +314,14 @@ export default function Admin() {
                           className="px-3 py-1.5 rounded-lg bg-[#ECFDF5] text-[#047857] border border-[#A7F3D0] hover:bg-[#D1FAE5] font-semibold text-[11px] cursor-pointer transition-all inline-flex items-center gap-1"
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" />
-                          <span>Approve Account</span>
+                          <span>Approve</span>
+                        </button>
+                        <button
+                          onClick={() => handleSuspend(u.id, u.username)}
+                          className="px-3 py-1.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 font-semibold text-[11px] cursor-pointer transition-all inline-flex items-center gap-1"
+                        >
+                          <Lock className="h-3.5 w-3.5" />
+                          <span>Suspend</span>
                         </button>
                         <button
                           onClick={() => handleReject(u.id, u.username)}

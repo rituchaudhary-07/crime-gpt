@@ -25,20 +25,48 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=True)
+    phone = Column(String, unique=True, index=True, nullable=True)
+    gender = Column(String, nullable=True)
+    dob = Column(String, nullable=True)
+    designation = Column(String, nullable=True)
     password_hash = Column(String, nullable=False)
     role = Column(String, default="officer")  # officer, sho, admin
     badge_number = Column(String, nullable=True)
     station = Column(String, default="Central Cyber Police Station")
-    status = Column(String, default="pending")  # pending, approved, rejected, disabled
+    status = Column(String, default="pending")  # pending, approved, rejected, suspended
     failed_login_attempts = Column(Integer, default=0)
     locked_until = Column(DateTime, nullable=True)
     last_login_at = Column(DateTime, nullable=True)
     last_login_ip = Column(String, nullable=True)
     require_password_change = Column(Integer, default=0)
+    reset_otp = Column(String, nullable=True)
+    reset_otp_expiry = Column(DateTime, nullable=True)
+    refresh_token_hash = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
     cases = relationship("Case", back_populates="creator")
+
+class PasswordHistory(Base):
+    __tablename__ = "password_histories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    password_hash = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    type = Column(String, default="info")  # info, case_assigned, case_accepted, case_rejected, evidence_uploaded, fir_generated, admin_approval, security_alert
+    link = Column(String, nullable=True)
+    is_read = Column(Integer, default=0)  # 0 for unread, 1 for read
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class Case(Base):
     __tablename__ = "cases"
@@ -51,7 +79,7 @@ class Case(Base):
     evidence = Column(Text, nullable=True)  # JSON-encoded array or plain string
     witness_details = Column(Text, nullable=True)  # JSON-encoded text or plain string
     analysis_output = Column(Text, nullable=True)  # AI generation markdown
-    status = Column(String, default="draft")  # draft, pending_approval, assigned, accepted, rejected_by_officer, under_investigation, evidence_collection, fir_generated, submitted, closed
+    status = Column(String, default="draft")  # draft, pending_approval, assigned, accepted, rejected_by_officer, under_investigation, evidence_collection, fir_draft_ready, submitted, closed, archived
     station = Column(String, default="Central Cyber Police Station")
     assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
     assignment_status = Column(String, default="accepted")  # pending, accepted, declined
@@ -122,6 +150,7 @@ class ChatMessage(Base):
     role = Column(String, nullable=False)  # user, assistant
     content = Column(Text, nullable=False)
     citations = Column(Text, nullable=True)  # JSON-encoded array of citations
+    attachments = Column(Text, nullable=True)  # JSON-encoded list of attached file info
     timestamp = Column(DateTime, default=datetime.utcnow)
 
 class Log(Base):
@@ -143,3 +172,4 @@ def get_db():
         yield db
     finally:
         db.close()
+

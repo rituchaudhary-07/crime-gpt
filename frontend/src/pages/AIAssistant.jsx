@@ -138,18 +138,63 @@ export default function AIAssistant() {
           </div>
         </div>
 
-        {/* Mock attachments */}
+        {/* Attachments & Export Actions */}
         <div className="p-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl space-y-2 text-[10px]">
           <span className="font-bold text-[#4B5563] block">SECURE CHAT OPTIONS</span>
           <div className="grid grid-cols-2 gap-2">
-            <button className="flex items-center justify-center gap-1.5 p-2 bg-white border border-[#E2E8F0] rounded-lg hover:bg-slate-100 text-[#4B5563]">
+            <button 
+              onClick={() => {
+                if (messages.length === 0) {
+                  alert("No chat conversation messages to export yet.");
+                  return;
+                }
+                api.exportChatPDF(messages, "CrimeGPT Assistant Transcript");
+              }}
+              className="flex items-center justify-center gap-1.5 p-2 bg-white border border-[#E2E8F0] hover:border-blue-300 hover:text-blue-600 rounded-lg text-[#4B5563] font-bold cursor-pointer transition-colors"
+            >
               <Upload className="h-3.5 w-3.5" />
               <span>PDF Logs</span>
             </button>
-            <button className="flex items-center justify-center gap-1.5 p-2 bg-white border border-[#E2E8F0] rounded-lg hover:bg-slate-100 text-[#4B5563]">
+            
+            <label className="flex items-center justify-center gap-1.5 p-2 bg-white border border-[#E2E8F0] hover:border-blue-300 hover:text-blue-600 rounded-lg text-[#4B5563] font-bold cursor-pointer transition-colors">
               <Image className="h-3.5 w-3.5" />
-              <span>Images</span>
-            </button>
+              <span>Images / Files</span>
+              <input
+                type="file"
+                accept=".jpg,.jpeg,.png,.pdf,.docx"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  try {
+                    setLoading(true);
+                    const res = await api.uploadChatAttachment(file);
+                    const attachmentMsg = {
+                      role: "user",
+                      content: `[Attached ${res.file_type} File: ${res.filename} (${res.size_kb} KB) - ${res.status}]`,
+                      attachment: res,
+                      timestamp: new Date(),
+                      citations: []
+                    };
+                    setMessages(prev => [...prev, attachmentMsg]);
+                    
+                    // Trigger AI Analysis of uploaded file
+                    const aiRes = await api.generalChat(`Analyze uploaded ${res.file_type} evidence file '${res.filename}' (${res.status}). Provide preliminary legal assessment and evidence chain guidelines.`);
+                    setMessages(prev => [...prev, {
+                      role: "assistant",
+                      content: aiRes.response,
+                      timestamp: new Date(),
+                      citations: aiRes.citations || []
+                    }]);
+                  } catch (err) {
+                    alert("Upload failed: " + err.message);
+                  } finally {
+                    setLoading(false);
+                    e.target.value = "";
+                  }
+                }}
+              />
+            </label>
           </div>
         </div>
       </div>
@@ -167,7 +212,7 @@ export default function AIAssistant() {
               <div className="space-y-1">
                 <h3 className="text-sm font-bold text-[#111827]">CrimeGPT Legal Core</h3>
                 <p className="text-xs text-[#6B7280] max-w-sm mx-auto leading-relaxed">
-                  Query legal guidelines or search and seizure protocols. Answers will render with official source citations.
+                  Query legal guidelines or upload Crime Scene Photos, Evidence Images, Screenshots, and Documents. Answers will render with official source citations.
                 </p>
               </div>
             </div>
@@ -185,6 +230,14 @@ export default function AIAssistant() {
                       ? "bg-[#2563EB] text-white rounded-tr-none" 
                       : "bg-white border border-[#E2E8F0] text-[#374151] rounded-tl-none shadow-sm"
                   }`}>
+                    {msg.attachment && (
+                      <div className="mb-2 p-2 bg-white/10 border border-white/20 rounded-lg space-y-1">
+                        <span className="font-bold flex items-center gap-1 text-[11px]">
+                          📁 Attachment: {msg.attachment.filename}
+                        </span>
+                        <span className="text-[9px] block opacity-90">{msg.attachment.file_type} • {msg.attachment.size_kb} KB • {msg.attachment.status}</span>
+                      </div>
+                    )}
                     {msg.role === "user" ? msg.content : parseMessageCitations(msg.content, msg.citations)}
                   </div>
                   
@@ -238,21 +291,51 @@ export default function AIAssistant() {
             className="flex-1 saas-input px-4 py-3 text-xs"
           />
           <div className="flex gap-2">
-            <button
-              type="button"
-              className="p-3 bg-[#F8FAFC] border border-[#E2E8F0] text-[#6B7280] hover:text-[#111827] rounded-xl cursor-pointer"
-              title="Voice dictation"
-            >
-              <Mic className="h-4 w-4" />
-            </button>
+            <label className="p-3 bg-[#F8FAFC] border border-[#E2E8F0] text-[#6B7280] hover:text-[#111827] rounded-xl cursor-pointer flex items-center justify-center" title="Upload Image / Photo / Document">
+              <Image className="h-4 w-4" />
+              <input
+                type="file"
+                accept=".jpg,.jpeg,.png,.pdf,.docx"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  try {
+                    setLoading(true);
+                    const res = await api.uploadChatAttachment(file);
+                    const attachmentMsg = {
+                      role: "user",
+                      content: `[Uploaded Evidence ${res.file_type}: ${res.filename} (${res.size_kb} KB)]`,
+                      attachment: res,
+                      timestamp: new Date(),
+                      citations: []
+                    };
+                    setMessages(prev => [...prev, attachmentMsg]);
+                    const aiRes = await api.generalChat(`Analyze uploaded ${res.file_type} evidence file '${res.filename}'. Provide guidance on chain of custody.`);
+                    setMessages(prev => [...prev, {
+                      role: "assistant",
+                      content: aiRes.response,
+                      timestamp: new Date(),
+                      citations: aiRes.citations || []
+                    }]);
+                  } catch (err) {
+                    alert("Upload failed: " + err.message);
+                  } finally {
+                    setLoading(false);
+                    e.target.value = "";
+                  }
+                }}
+              />
+            </label>
             <button
               type="submit"
-              className="px-5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl cursor-pointer hover:shadow-lg transition-all flex items-center justify-center"
+              className="px-5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl cursor-pointer hover:shadow-lg transition-all flex items-center justify-center font-bold"
             >
               <Send className="h-4 w-4" />
             </button>
           </div>
         </form>
+
 
       </div>
 

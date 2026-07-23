@@ -42,16 +42,55 @@ export const api = {
     return data;
   },
   
-  register: async (username, password, badgeNumber = "", role = "officer", station = "Central Cyber Police Station") => {
+  register: async (userData) => {
     const response = await fetch(`${API_BASE_URL}/auth/register`, {
       method: "POST",
       headers: getHeaders(),
-      body: JSON.stringify({ username, password, badge_number: badgeNumber, role, station })
+      body: JSON.stringify(userData)
     });
     
     if (!response.ok) {
       const errorData = await response.json();
       throw new Error(errorData.detail || "Registration failed");
+    }
+    return response.json();
+  },
+  
+  forgotPassword: async (email) => {
+    const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ email })
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || "Failed to process forgot password request");
+    }
+    return response.json();
+  },
+
+  verifyOTP: async (email, otp) => {
+    const response = await fetch(`${API_BASE_URL}/auth/verify-otp`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ email, otp })
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || "Invalid or expired OTP");
+    }
+    return response.json();
+  },
+
+  resetPassword: async (email, otp, newPassword) => {
+    const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ email, otp, new_password: newPassword })
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || "Password reset failed");
     }
     return response.json();
   },
@@ -83,6 +122,53 @@ export const api = {
     return localStorage.getItem("username") || "";
   },
 
+  // Notifications
+  getNotifications: async () => {
+    const response = await fetch(`${API_BASE_URL}/notifications`, {
+      method: "GET",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to load notifications");
+    return response.json();
+  },
+
+  markNotificationRead: async (id) => {
+    const response = await fetch(`${API_BASE_URL}/notifications/${id}/read`, {
+      method: "PUT",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to update notification");
+    return response.json();
+  },
+
+  markAllNotificationsRead: async () => {
+    const response = await fetch(`${API_BASE_URL}/notifications/read-all`, {
+      method: "PUT",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to clear notifications");
+    return response.json();
+  },
+
+  // Autocomplete & Search
+  locationAutocomplete: async (query) => {
+    const response = await fetch(`${API_BASE_URL}/locations/autocomplete?q=${encodeURIComponent(query)}`, {
+      method: "GET",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to fetch location suggestions");
+    return response.json();
+  },
+
+  globalSearch: async (query) => {
+    const response = await fetch(`${API_BASE_URL}/search/global?q=${encodeURIComponent(query)}`, {
+      method: "GET",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Global search failed");
+    return response.json();
+  },
+
   // Cases
   getCases: async () => {
     const response = await fetch(`${API_BASE_URL}/cases`, {
@@ -99,6 +185,24 @@ export const api = {
       headers: getHeaders()
     });
     if (!response.ok) throw new Error("Failed to load case details");
+    return response.json();
+  },
+
+  getArchivedCases: async () => {
+    const response = await fetch(`${API_BASE_URL}/cases/archive`, {
+      method: "GET",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to load archived cases");
+    return response.json();
+  },
+
+  restoreCase: async (caseId) => {
+    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/restore`, {
+      method: "POST",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to restore case");
     return response.json();
   },
   
@@ -119,6 +223,16 @@ export const api = {
       body: JSON.stringify(caseData)
     });
     if (!response.ok) throw new Error("Failed to update case");
+    return response.json();
+  },
+
+  updateCaseStatus: async (caseId, status) => {
+    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/status`, {
+      method: "PUT",
+      headers: getHeaders(),
+      body: JSON.stringify({ status })
+    });
+    if (!response.ok) throw new Error("Failed to update case status");
     return response.json();
   },
   
@@ -254,6 +368,38 @@ export const api = {
     return response.json();
   },
 
+  exportChatPDF: async (chatMessages, caseTitle = "AI Investigation Assistant Log") => {
+    const response = await fetch(`${API_BASE_URL}/chat/export-pdf`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ chat_messages: chatMessages, case_title: caseTitle })
+    });
+    if (!response.ok) throw new Error("Failed to export chat PDF");
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = `CrimeGPT_Chat_Transcript_${Date.now()}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  },
+
+  uploadChatAttachment: async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await fetch(`${API_BASE_URL}/chat/upload-attachment`, {
+      method: "POST",
+      headers: getHeaders(true),
+      body: formData
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || "Failed to upload chat attachment");
+    }
+    return response.json();
+  },
+
   // Chat History
   getChatHistory: async (caseId = null, messageType = "general_assistant") => {
     let url = `${API_BASE_URL}/chat/history?message_type=${messageType}`;
@@ -380,6 +526,19 @@ export const api = {
     return response.json();
   },
 
+  updateOfficerStatus: async (userId, status) => {
+    const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/status`, {
+      method: "PUT",
+      headers: getHeaders(),
+      body: JSON.stringify({ status })
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || "Failed to update officer status");
+    }
+    return response.json();
+  },
+
   approveUser: async (userId) => {
     const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/approve`, {
       method: "POST",
@@ -468,6 +627,19 @@ export const api = {
     return response.json();
   },
 
+  respondCaseAssignment: async (caseId, action, reason = "") => {
+    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/respond-assignment`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ action, reason })
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || "Failed to respond to case assignment");
+    }
+    return response.json();
+  },
+
   acceptCase: async (caseId) => {
     const response = await fetch(`${API_BASE_URL}/cases/${caseId}/accept`, {
       method: "POST",
@@ -505,3 +677,4 @@ export const api = {
     return response.json();
   }
 };
+
