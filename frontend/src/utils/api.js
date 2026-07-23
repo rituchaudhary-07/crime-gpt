@@ -452,5 +452,56 @@ export const api = {
       throw new Error(err.detail || "Password change failed");
     }
     return response.json();
+  },
+
+  // Case Assignment Workflow
+  assignCase: async (caseId, officerId) => {
+    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/assign`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ officer_id: officerId })
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || "Failed to assign case");
+    }
+    return response.json();
+  },
+
+  acceptCase: async (caseId) => {
+    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/accept`, {
+      method: "POST",
+      headers: getHeaders()
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || "Failed to accept case investigation");
+    }
+    return response.json();
+  },
+
+  declineCase: async (caseId, reason) => {
+    const response = await fetch(`${API_BASE_URL}/cases/${caseId}/decline`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ reason })
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || "Failed to decline case investigation");
+    }
+    return response.json();
+  },
+
+  deleteChatHistory: async (chatId) => {
+    const response = await fetch(`${API_BASE_URL}/chat/history/${chatId}`, {
+      method: "DELETE",
+      headers: getHeaders()
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || "Failed to delete chat entry");
+    }
+    return response.json();
   }
 };

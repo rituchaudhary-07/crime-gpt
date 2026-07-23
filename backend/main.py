@@ -189,11 +189,21 @@ class CaseResponse(BaseModel):
     analysis_output: Optional[str]
     status: str
     station: Optional[str]
+    assigned_to: Optional[int] = None
+    assigned_officer_name: Optional[str] = None
+    assignment_status: Optional[str] = "accepted"
+    decline_reason: Optional[str] = None
     created_at: datetime
     created_by: int
     
     class Config:
         from_attributes = True
+
+class CaseAssignRequest(BaseModel):
+    officer_id: int
+
+class CaseDeclineRequest(BaseModel):
+    reason: str
 
 class IntakeRequest(BaseModel):
     description: str
@@ -371,16 +381,41 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 # --- CASES CRUD ---
 
-@app.get("/api/cases", response_model=List[CaseResponse])
+def serialize_case(c: Case, db: Session) -> Dict[str, Any]:
+    assigned_name = None
+    if c.assigned_to:
+        u = db.query(User).filter(User.id == c.assigned_to).first()
+        if u:
+            assigned_name = f"{u.username} ({u.badge_number or 'No Badge'})"
+    return {
+        "id": c.id,
+        "title": c.title,
+        "description": c.description,
+        "location": c.location,
+        "date": c.date,
+        "evidence": c.evidence,
+        "witness_details": c.witness_details,
+        "analysis_output": c.analysis_output,
+        "status": c.status,
+        "station": c.station,
+        "assigned_to": c.assigned_to,
+        "assigned_officer_name": assigned_name,
+        "assignment_status": c.assignment_status or "accepted",
+        "decline_reason": c.decline_reason,
+        "created_at": c.created_at,
+        "created_by": c.created_by
+    }
+
+@app.get("/api/cases")
 def get_cases(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # Admin sees all, SHO sees station cases, Officer sees own cases
+    # Admin sees all, SHO sees station cases, Officer sees own OR assigned cases
     if current_user.role == "admin":
         cases = db.query(Case).all()
     elif current_user.role == "sho":
         cases = db.query(Case).filter(Case.station == current_user.station).all()
     else:
-        cases = db.query(Case).filter(Case.created_by == current_user.id).all()
-    return cases
+        cases = db.query(Case).filter((Case.created_by == current_user.id) | (Case.assigned_to == current_user.id)).all()
+    return [serialize_case(c, db) for c in cases]
 
 @app.post("/api/cases", response_model=CaseResponse)
 def create_case(case_data: CaseCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -392,7 +427,9 @@ def create_case(case_data: CaseCreate, current_user: User = Depends(get_current_
         evidence=case_data.evidence,
         witness_details=case_data.witness_details,
         station=current_user.station,
-        created_by=current_user.id
+        created_by=current_user.id,
+        assigned_to=current_user.id,
+        assignment_status="accepted"
     )
     db.add(case)
     db.commit()
@@ -401,13 +438,13 @@ def create_case(case_data: CaseCreate, current_user: User = Depends(get_current_
     log_audit(db, current_user.username, "CREATE_CASE", f"Created Case ID {case.id} - '{case.title}'", case_id=case.id)
     return case
 
-@app.get("/api/cases/{case_id}", response_model=CaseResponse)
+@app.get("/api/cases/{case_id}")
 def get_case(case_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     case = verify_case_access(case_id, current_user, db)
     log_audit(db, current_user.username, "VIEW_CASE", f"Viewed case details for ID {case_id}", case_id=case_id)
-    return case
+    return serialize_case(case, db)
 
-@app.put("/api/cases/{case_id}", response_model=CaseResponse)
+@app.put("/api/cases/{case_id}")
 def update_case(case_id: int, case_data: CaseUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     case = verify_case_access(case_id, current_user, db)
     
@@ -418,7 +455,7 @@ def update_case(case_id: int, case_data: CaseUpdate, current_user: User = Depend
     db.refresh(case)
     
     log_audit(db, current_user.username, "UPDATE_CASE", f"Modified case metadata for ID {case_id}", case_id=case_id)
-    return case
+    return serialize_case(case, db)
 
 @app.delete("/api/cases/{case_id}")
 def delete_case(case_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -428,8 +465,67 @@ def delete_case(case_id: int, current_user: User = Depends(get_current_user), db
     db.delete(case)
     db.commit()
     
-    log_audit(db, current_user.username, "DELETE_CASE", f"Permanently deleted case ID {case_id} ('{title}')", case_id=case_id)
+    log_audit(db, current_user.username, "DELETE_CASE", f"Deleted case ID {case_id} - '{title}'", case_id=case_id)
     return {"message": "Case deleted successfully"}
+
+@app.post("/api/cases/{case_id}/assign")
+def assign_case(case_id: int, request: CaseAssignRequest, current_user: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    case = db.query(Case).filter(Case.id == case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    assigned_user = db.query(User).filter(User.id == request.officer_id).first()
+    if not assigned_user:
+        raise HTTPException(status_code=404, detail="Assigned officer not found")
+    
+    case.assigned_to = assigned_user.id
+    case.assignment_status = "pending"
+    case.status = "assigned"
+    db.commit()
+    
+    log_audit(db, current_user.username, "ASSIGN_CASE", f"Assigned Case ID {case.id} to officer '{assigned_user.username}'", case_id=case_id)
+    return {"message": f"Case assigned to {assigned_user.username}. Awaiting officer acceptance."}
+
+@app.post("/api/cases/{case_id}/accept")
+def accept_case_investigation(case_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    case = db.query(Case).filter(Case.id == case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    if current_user.role != "admin" and case.assigned_to != current_user.id and case.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized to accept this case investigation")
+        
+    case.assignment_status = "accepted"
+    case.status = "accepted"
+    case.decline_reason = None
+    db.commit()
+    
+    log_audit(db, current_user.username, "ACCEPT_CASE", f"Officer '{current_user.username}' accepted case investigation for Case ID {case_id}", case_id=case_id)
+    return {"message": "Case investigation accepted successfully."}
+
+@app.post("/api/cases/{case_id}/decline")
+def decline_case_investigation(case_id: int, request: CaseDeclineRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    case = db.query(Case).filter(Case.id == case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    if current_user.role != "admin" and case.assigned_to != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized to decline this case investigation")
+        
+    case.assignment_status = "declined"
+    case.status = "rejected_by_officer"
+    case.decline_reason = request.reason
+    db.commit()
+    
+    log_audit(db, current_user.username, "DECLINE_CASE", f"Officer '{current_user.username}' declined investigation for Case ID {case_id}. Reason: {request.reason}", case_id=case_id)
+    return {"message": "Case investigation declined. Administrator has been notified."}
+
+@app.delete("/api/chat/history/{chat_id}")
+def delete_chat_history(chat_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    msg = db.query(ChatMessage).filter(ChatMessage.id == chat_id, ChatMessage.user_id == current_user.id).first()
+    if not msg:
+        raise HTTPException(status_code=404, detail="Chat message not found or unauthorized")
+    db.delete(msg)
+    db.commit()
+    log_audit(db, current_user.username, "DELETE_CHAT", f"Deleted chat message ID {chat_id}")
+    return {"message": "Chat message deleted successfully."}
 
 # --- FIR GENERATOR FLOWS ---
 

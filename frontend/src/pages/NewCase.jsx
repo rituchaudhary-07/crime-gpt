@@ -6,6 +6,8 @@ import {
   Clock, Calendar, Zap
 } from "lucide-react";
 import { api } from "../utils/api";
+import LocationAutocomplete from "../components/LocationAutocomplete";
+import { sanitizePhoneNumber, validatePhoneNumber } from "../utils/validation";
 
 export default function NewCase() {
   const navigate = useNavigate();
@@ -279,12 +281,10 @@ Contacts: ${formData.witness_contact || "N/A"}`;
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-[#4B5563] mb-1">JURISDICTION PLACE / AREA</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Cyber Crimes Police Cell, Sector 4"
+                  <LocationAutocomplete
                     value={formData.location}
-                    onChange={(e) => handleInputChange("location", e.target.value)}
-                    className="w-full saas-input px-3.5 py-2.5"
+                    onChange={(val) => handleInputChange("location", val)}
+                    placeholder="e.g. Ahmedabad Cyber Cell, Sector 4"
                   />
                 </div>
               </div>
@@ -319,14 +319,24 @@ Contacts: ${formData.witness_contact || "N/A"}`;
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-[#4B5563] mb-1">PHONE NUMBER</label>
+                  <label className="block text-[11px] font-semibold text-[#4B5563] mb-1">PHONE NUMBER (10 DIGITS)</label>
                   <input
                     type="text"
-                    placeholder="e.g. +91 98765 43210"
+                    maxLength={10}
+                    placeholder="e.g. 9876543210"
                     value={formData.victim_phone}
-                    onChange={(e) => handleInputChange("victim_phone", e.target.value)}
-                    className="w-full saas-input px-3.5 py-2.5"
+                    onChange={(e) => handleInputChange("victim_phone", sanitizePhoneNumber(e.target.value))}
+                    className={`w-full saas-input px-3.5 py-2.5 ${
+                      formData.victim_phone && !validatePhoneNumber(formData.victim_phone) 
+                        ? 'border-rose-400 focus:ring-rose-400 bg-rose-50/40' 
+                        : ''
+                    }`}
                   />
+                  {formData.victim_phone && !validatePhoneNumber(formData.victim_phone) && (
+                    <span className="text-[10px] text-rose-600 font-semibold mt-1 block">
+                      Please enter a valid 10-digit mobile number ({formData.victim_phone.length}/10 digits).
+                    </span>
+                  )}
                 </div>
               </div>
 

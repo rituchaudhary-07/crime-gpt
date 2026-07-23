@@ -51,8 +51,11 @@ class Case(Base):
     evidence = Column(Text, nullable=True)  # JSON-encoded array or plain string
     witness_details = Column(Text, nullable=True)  # JSON-encoded text or plain string
     analysis_output = Column(Text, nullable=True)  # AI generation markdown
-    status = Column(String, default="draft")  # draft, under_review, filed, investigating, closed
+    status = Column(String, default="draft")  # draft, pending_approval, assigned, accepted, rejected_by_officer, under_investigation, evidence_collection, fir_generated, submitted, closed
     station = Column(String, default="Central Cyber Police Station")
+    assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
+    assignment_status = Column(String, default="accepted")  # pending, accepted, declined
+    decline_reason = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(Integer, ForeignKey("users.id"))
 
