@@ -349,9 +349,68 @@ export const api = {
     return response.json();
   },
 
-  // Chat Sessions (ChatGPT / Gemini Style Threads)
+  // Conversations API (ChatGPT / Gemini Threads)
+  getConversations: async () => {
+    const response = await fetch(`${API_BASE_URL}/conversations`, {
+      method: "GET",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to fetch conversations");
+    return response.json();
+  },
+
+  createConversation: async (title = "New Legal Consultation") => {
+    const response = await fetch(`${API_BASE_URL}/conversations`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ title })
+    });
+    if (!response.ok) throw new Error("Failed to create new conversation");
+    return response.json();
+  },
+
+  getConversation: async (convId) => {
+    const response = await fetch(`${API_BASE_URL}/conversations/${convId}`, {
+      method: "GET",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to fetch conversation details");
+    return response.json();
+  },
+
+  sendMessageToConversation: async (convId, message) => {
+    const customKey = localStorage.getItem("gemini_api_key") || "";
+    const response = await fetch(`${API_BASE_URL}/conversations/${convId}/messages`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ message, session_id: convId, custom_key: customKey })
+    });
+    if (!response.ok) throw new Error("Failed to send message to conversation");
+    return response.json();
+  },
+
+  renameConversation: async (convId, title) => {
+    const response = await fetch(`${API_BASE_URL}/conversations/${convId}`, {
+      method: "PATCH",
+      headers: getHeaders(),
+      body: JSON.stringify({ title })
+    });
+    if (!response.ok) throw new Error("Failed to rename conversation");
+    return response.json();
+  },
+
+  deleteConversation: async (convId) => {
+    const response = await fetch(`${API_BASE_URL}/conversations/${convId}`, {
+      method: "DELETE",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to delete conversation");
+    return response.json();
+  },
+
+  // Legacy Chat Sessions Aliases
   getChatSessions: async () => {
-    const response = await fetch(`${API_BASE_URL}/chat/sessions`, {
+    const response = await fetch(`${API_BASE_URL}/conversations`, {
       method: "GET",
       headers: getHeaders()
     });
@@ -360,7 +419,7 @@ export const api = {
   },
 
   createChatSession: async (title = "New Legal Consultation") => {
-    const response = await fetch(`${API_BASE_URL}/chat/sessions`, {
+    const response = await fetch(`${API_BASE_URL}/conversations`, {
       method: "POST",
       headers: getHeaders(),
       body: JSON.stringify({ title })
@@ -370,8 +429,8 @@ export const api = {
   },
 
   renameChatSession: async (sessionId, title) => {
-    const response = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}`, {
-      method: "PUT",
+    const response = await fetch(`${API_BASE_URL}/conversations/${sessionId}`, {
+      method: "PATCH",
       headers: getHeaders(),
       body: JSON.stringify({ title })
     });
@@ -380,7 +439,7 @@ export const api = {
   },
 
   deleteChatSession: async (sessionId) => {
-    const response = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}`, {
+    const response = await fetch(`${API_BASE_URL}/conversations/${sessionId}`, {
       method: "DELETE",
       headers: getHeaders()
     });
@@ -389,11 +448,21 @@ export const api = {
   },
 
   getSessionMessages: async (sessionId) => {
-    const response = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}/messages`, {
+    const res = await fetch(`${API_BASE_URL}/conversations/${sessionId}`, {
       method: "GET",
       headers: getHeaders()
     });
-    if (!response.ok) throw new Error("Failed to fetch session messages");
+    if (!res.ok) throw new Error("Failed to fetch session messages");
+    const data = await res.json();
+    return data.messages || [];
+  },
+
+  getArchivedCases: async () => {
+    const response = await fetch(`${API_BASE_URL}/cases/archive`, {
+      method: "GET",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to fetch archived cases");
     return response.json();
   },
 

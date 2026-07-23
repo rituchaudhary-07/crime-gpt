@@ -1100,10 +1100,11 @@ def get_case_sop_chat(
         db.rollback()
         return {"response": f"AI Error: {e}. Fallback checklist:\n{offline_response}", "citations": []}
 
-# --- CHAT SESSION MANAGEMENT ENDPOINTS ---
+# --- CONVERSATIONS & CHAT SESSION ENDPOINTS ---
 
+@app.get("/api/conversations")
 @app.get("/api/chat/sessions")
-def get_chat_sessions(
+def get_conversations(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -1123,16 +1124,153 @@ def get_chat_sessions(
         else:
             group = "Older"
             
+        last_msg = db.query(ChatMessage).filter(ChatMessage.session_id == s.session_id).order_by(ChatMessage.timestamp.desc()).first()
+        last_preview = last_msg.content[:60] + ("..." if len(last_msg.content) > 60 else "") if last_msg else ""
+        
         result.append({
-            "id": s.id,
+            "_id": s.session_id,
+            "id": s.session_id,
             "session_id": s.session_id,
+            "userId": s.user_id,
             "title": s.title,
             "group": group,
-            "created_at": s.created_at.isoformat() if hasattr(s.created_at, 'isoformat') else str(s.created_at),
-            "updated_at": s.updated_at.isoformat() if hasattr(s.updated_at, 'isoformat') else str(s.updated_at)
+            "lastMessagePreview": last_preview,
+            "createdAt": s.created_at.isoformat() if hasattr(s.created_at, 'isoformat') else str(s.created_at),
+            "updatedAt": s.updated_at.isoformat() if hasattr(s.updated_at, 'isoformat') else str(s.updated_at)
         })
         
     return result
+
+@app.post("/api/conversations")
+@app.post("/api/chat/sessions")
+def create_conversation(
+    request: CreateSessionRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    session_id = f"conv_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{random.randint(1000, 9999)}"
+    session = ChatSession(
+        session_id=session_id,
+        user_id=current_user.id,
+        title=request.title or "New Legal Consultation"
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return {
+        "_id": session.session_id,
+        "id": session.session_id,
+        "session_id": session.session_id,
+        "userId": session.user_id,
+        "title": session.title,
+        "group": "Today",
+        "createdAt": session.created_at.isoformat(),
+        "updatedAt": session.updated_at.isoformat()
+    }
+
+@app.get("/api/conversations/{conv_id}")
+def get_single_conversation(
+    conv_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    session = db.query(ChatSession).filter(ChatSession.session_id == conv_id, ChatSession.user_id == current_user.id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+        
+    messages = db.query(ChatMessage).filter(
+        ChatMessage.session_id == conv_id,
+        ChatMessage.user_id == current_user.id
+    ).order_by(ChatMessage.timestamp.asc()).all()
+    
+    serialized_messages = []
+    for m in messages:
+        cites = []
+        if m.citations:
+            try:
+                cites = json.loads(m.citations)
+            except:
+                pass
+        serialized_messages.append({
+            "id": m.id,
+            "session_id": m.session_id,
+            "role": m.role,
+            "content": m.content,
+            "timestamp": m.timestamp.isoformat() if hasattr(m.timestamp, 'isoformat') else str(m.timestamp),
+            "citations": cites
+        })
+        
+    return {
+        "_id": session.session_id,
+        "id": session.session_id,
+        "session_id": session.session_id,
+        "userId": session.user_id,
+        "title": session.title,
+        "messages": serialized_messages,
+        "createdAt": session.created_at.isoformat() if hasattr(session.created_at, 'isoformat') else str(session.created_at),
+        "updatedAt": session.updated_at.isoformat() if hasattr(session.updated_at, 'isoformat') else str(session.updated_at)
+    }
+
+@app.patch("/api/conversations/{conv_id}")
+@app.put("/api/conversations/{conv_id}")
+@app.put("/api/chat/sessions/{conv_id}")
+def rename_conversation(
+    conv_id: str,
+    request: RenameSessionRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    session = db.query(ChatSession).filter(ChatSession.session_id == conv_id, ChatSession.user_id == current_user.id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+        
+    session.title = request.title
+    session.updated_at = datetime.utcnow()
+    db.commit()
+    return {
+        "_id": session.session_id,
+        "id": session.session_id,
+        "title": session.title,
+        "updatedAt": session.updated_at.isoformat(),
+        "message": "Conversation renamed successfully"
+    }
+
+@app.delete("/api/conversations/{conv_id}")
+@app.delete("/api/chat/sessions/{conv_id}")
+def delete_conversation(
+    conv_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    session = db.query(ChatSession).filter(ChatSession.session_id == conv_id, ChatSession.user_id == current_user.id).first()
+    if session:
+        db.query(ChatMessage).filter(ChatMessage.session_id == conv_id).delete()
+        db.delete(session)
+        db.commit()
+    return {"message": "Conversation deleted successfully"}
+
+@app.post("/api/conversations/{conv_id}/messages")
+def send_message_to_conversation(
+    conv_id: str,
+    request: GeneralChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    request.session_id = conv_id
+    return general_ai_chat(request, current_user, db)
+
+@app.get("/api/cases/archive")
+def get_archived_cases(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Case).filter(Case.status.in_(["archived", "closed"]))
+    if current_user.role == "officer":
+        query = query.filter(Case.created_by == current_user.id)
+    elif current_user.role == "sho":
+        query = query.filter(Case.station == current_user.station)
+    cases = query.all()
+    return cases
 
 @app.post("/api/chat/sessions")
 def create_chat_session(

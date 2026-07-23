@@ -354,9 +354,16 @@ export default function AIAssistant() {
                                 className="bg-slate-900 border border-blue-500 text-white px-2 py-0.5 rounded text-xs w-full focus:outline-none"
                               />
                             ) : (
-                              <span className="truncate font-medium leading-tight">
-                                {s.title}
-                              </span>
+                              <div className="flex flex-col truncate">
+                                <span className="truncate font-bold leading-snug">
+                                  {s.title}
+                                </span>
+                                {s.lastMessagePreview && (
+                                  <span className="text-[10px] text-slate-500 font-normal truncate">
+                                    {s.lastMessagePreview}
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </div>
 

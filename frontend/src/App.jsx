@@ -18,7 +18,6 @@ import FIRGenerator from "./pages/FIRGenerator";
 import LegalSearch from "./pages/LegalSearch";
 import EvidenceManager from "./pages/EvidenceManager";
 import Analytics from "./pages/Analytics";
-import ChatHistory from "./pages/ChatHistory";
 import SettingsPage from "./pages/Settings";
 import UserProfile from "./pages/UserProfile";
 
@@ -114,7 +113,6 @@ function Layout({ children }) {
     { name: "Legal Search", path: "/legal-search", icon: <SearchCheck className="h-4.5 w-4.5" /> },
     { name: "Evidence", path: "/evidence", icon: <ClipboardList className="h-4.5 w-4.5" /> },
     { name: "Analytics", path: "/analytics", icon: <BarChart3 className="h-4.5 w-4.5" /> },
-    { name: "History", path: "/history", icon: <History className="h-4.5 w-4.5" /> },
     { name: "Settings", path: "/settings", icon: <Settings className="h-4.5 w-4.5" /> }
   ];
 
@@ -513,15 +511,6 @@ export default function App() {
           element={
             <PrivateRoute>
               <Analytics />
-            </PrivateRoute>
-          } 
-        />
-
-        <Route 
-          path="/history" 
-          element={
-            <PrivateRoute>
-              <ChatHistory />
             </PrivateRoute>
           } 
         />

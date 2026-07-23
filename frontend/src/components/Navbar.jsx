@@ -32,12 +32,10 @@ export default function Navbar() {
   const navItems = [
     { name: "Dashboard", path: "/dashboard" },
     { name: "FIR Generator", path: "/analyze" },
-    { name: "FIR Archive", path: "/history" },
     { name: "Reports", path: "/reports" },
     { name: "Legal Search", path: "/legal-search" },
     { name: "AI Assistant", path: "/assistant" },
     { name: "Analytics", path: "/analytics" },
-    { name: "Chat History", path: "/chat-history" },
     { name: "Settings", path: "/settings" },
   ];
 
