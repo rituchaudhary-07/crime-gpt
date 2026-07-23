@@ -14,6 +14,7 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("approvals"); // approvals, accounts, audit, register
+  const [userStatusFilter, setUserStatusFilter] = useState("all");
   
   // New User Form State
   const [newUsername, setNewUsername] = useState("");
@@ -348,6 +349,21 @@ export default function Admin() {
               <h3 className="text-sm font-bold text-[#111827]">System Accounts Directory & Lockout Controls</h3>
               <p className="text-xs text-[#6B7280]">View active credentials, clear account lockouts, toggle access status, or reset credentials.</p>
             </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 font-semibold">Filter:</span>
+              <select
+                value={userStatusFilter || "all"}
+                onChange={(e) => setUserStatusFilter(e.target.value)}
+                className="saas-input px-3 py-1.5 text-xs font-semibold cursor-pointer"
+              >
+                <option value="all">All Statuses ({users.length})</option>
+                <option value="pending">Pending ({users.filter(u => u.status === 'pending').length})</option>
+                <option value="approved">Approved ({users.filter(u => u.status === 'approved' || !u.status).length})</option>
+                <option value="rejected">Rejected ({users.filter(u => u.status === 'rejected').length})</option>
+                <option value="suspended">Suspended ({users.filter(u => u.status === 'suspended' || u.status === 'disabled').length})</option>
+              </select>
+            </div>
           </div>
 
           <div className="saas-card overflow-x-auto">
@@ -357,13 +373,16 @@ export default function Admin() {
                   <th className="p-4 font-semibold">User</th>
                   <th className="p-4 font-semibold">Role / Badge</th>
                   <th className="p-4 font-semibold">Status</th>
+                  <th className="p-4 font-semibold">Approval / Reg Date</th>
                   <th className="p-4 font-semibold">Failed Logins</th>
-                  <th className="p-4 font-semibold">Last Login IP</th>
                   <th className="p-4 font-semibold text-right">Access Controls</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F1F5F9]">
-                {users.map((u) => {
+                {users.filter(u => {
+                  if (!userStatusFilter || userStatusFilter === "all") return true;
+                  return (u.status || "approved") === userStatusFilter;
+                }).map((u) => {
                   const isLocked = u.locked_until || (u.failed_login_attempts >= 5);
                   const statusVal = u.status || "approved";
                   return (
@@ -381,10 +400,17 @@ export default function Admin() {
                           statusVal === 'approved' ? 'bg-[#ECFDF5] text-[#047857] border-[#A7F3D0]' :
                           statusVal === 'pending' ? 'bg-[#FFFBEB] text-[#B45309] border-[#FDE68A]' :
                           statusVal === 'rejected' ? 'bg-rose-50 text-rose-700 border-rose-200' :
-                          'bg-slate-100 text-slate-700 border-slate-300'
+                          'bg-amber-50 text-amber-800 border-amber-200'
                         }`}>
                           {statusVal}
                         </span>
+                      </td>
+                      <td className="p-4 font-mono text-[10px] text-[#64748B]">
+                        {u.approved_at ? (
+                          <span className="text-emerald-700 font-semibold block">Approved: {new Date(u.approved_at).toLocaleDateString()}</span>
+                        ) : (
+                          <span className="block text-slate-500">Reg: {new Date(u.created_at).toLocaleDateString()}</span>
+                        )}
                       </td>
                       <td className="p-4 font-mono">
                         {isLocked ? (
@@ -395,9 +421,6 @@ export default function Admin() {
                         ) : (
                           <span className="text-[#64748B]">{u.failed_login_attempts || 0} / 5</span>
                         )}
-                      </td>
-                      <td className="p-4 font-mono text-[11px] text-[#64748B]">
-                        {u.last_login_ip || "127.0.0.1"}
                       </td>
                       <td className="p-4 text-right space-x-1.5">
                         {isLocked && (
@@ -411,16 +434,34 @@ export default function Admin() {
                           </button>
                         )}
                         <button
-                          onClick={() => handleToggleStatus(u.id, u.username)}
-                          disabled={u.role === 'admin'}
-                          className={`px-2.5 py-1 rounded-lg font-semibold text-[10px] cursor-pointer border ${
-                            statusVal === 'approved' 
-                              ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100' 
-                              : 'bg-[#ECFDF5] text-[#047857] border-[#A7F3D0] hover:bg-[#D1FAE5]'
-                          }`}
+                          onClick={() => handleApprove(u.id, u.username)}
+                          disabled={statusVal === 'approved'}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 font-semibold text-[10px] cursor-pointer disabled:opacity-50"
                         >
-                          {statusVal === 'approved' ? 'Disable' : 'Enable'}
+                          Approve
                         </button>
+                        <button
+                          onClick={() => handleSuspend(u.id, u.username)}
+                          disabled={statusVal === 'suspended'}
+                          className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 font-semibold text-[10px] cursor-pointer disabled:opacity-50"
+                        >
+                          Suspend
+                        </button>
+                        <button
+                          onClick={() => handleReject(u.id, u.username)}
+                          disabled={statusVal === 'rejected'}
+                          className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 font-semibold text-[10px] cursor-pointer disabled:opacity-50"
+                        >
+                          Reject
+                        </button>
+                        <button
+                          onClick={() => setResetModalUserId(u.id)}
+                          className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-300 hover:bg-slate-200 font-semibold text-[10px] cursor-pointer"
+                        >
+                          <Key className="h-3 w-3 inline mr-1" />
+                          <span>Reset PW</span>
+                        </button>
+                      </td>
                         <button
                           onClick={() => setResetModalUserId(u.id)}
                           className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-300 hover:bg-slate-200 font-semibold text-[10px] cursor-pointer"

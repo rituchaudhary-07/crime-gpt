@@ -35,6 +35,7 @@ class User(Base):
     badge_number = Column(String, nullable=True)
     station = Column(String, default="Central Cyber Police Station")
     status = Column(String, default="pending")  # pending, approved, rejected, suspended
+    approved_at = Column(DateTime, nullable=True)
     failed_login_attempts = Column(Integer, default=0)
     locked_until = Column(DateTime, nullable=True)
     last_login_at = Column(DateTime, nullable=True)

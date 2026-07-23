@@ -385,13 +385,14 @@ export const api = {
     link.remove();
   },
 
-  uploadChatAttachment: async (file) => {
+  uploadChatAttachment: async (file, signal = null) => {
     const formData = new FormData();
     formData.append("file", file);
-    const response = await fetch(`${API_BASE_URL}/chat/upload-attachment`, {
+    const response = await fetch(`${API_BASE_URL}/upload`, {
       method: "POST",
       headers: getHeaders(true),
-      body: formData
+      body: formData,
+      signal: signal
     });
     if (!response.ok) {
       const err = await response.json();
@@ -400,7 +401,39 @@ export const api = {
     return response.json();
   },
 
-  // Chat History
+  // Unified History System
+  getHistory: async (actionType = "all", query = "") => {
+    let url = `${API_BASE_URL}/history?action_type=${actionType}`;
+    if (query) {
+      url += `&q=${encodeURIComponent(query)}`;
+    }
+    const response = await fetch(url, {
+      method: "GET",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to fetch history items");
+    return response.json();
+  },
+
+  deleteHistoryItem: async (itemId) => {
+    const response = await fetch(`${API_BASE_URL}/history/${itemId}`, {
+      method: "DELETE",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to delete history item");
+    return response.json();
+  },
+
+  clearAllHistory: async () => {
+    const response = await fetch(`${API_BASE_URL}/history`, {
+      method: "DELETE",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to clear history log");
+    return response.json();
+  },
+
+  // Legacy Chat History
   getChatHistory: async (caseId = null, messageType = "general_assistant") => {
     let url = `${API_BASE_URL}/chat/history?message_type=${messageType}`;
     if (caseId) {

@@ -2,347 +2,311 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Search, Eye, Filter, Calendar, MapPin, Tag, RefreshCw, FolderSearch,
-  MessageSquare, Trash2, Download, Clock, User, ArrowUpDown, FileText, CheckCircle2, AlertCircle
+  MessageSquare, Trash2, Download, Clock, User, ArrowUpDown, FileText, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight, Layers, ExternalLink
 } from "lucide-react";
 import { api } from "../utils/api";
+import Toast from "../components/Toast";
 
 export default function History() {
   const navigate = useNavigate();
   const currentUsername = api.getUsername() || "Officer";
 
-  const [activeTab, setActiveTab] = useState("chats"); // 'chats' or 'cases'
-  const [chats, setChats] = useState([]);
-  const [cases, setCases] = useState([]);
+  const [historyItems, setHistoryItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
+  const [toast, setToast] = useState(null);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all"); // 'all', 'general_assistant', 'sop'
+  const [actionTypeFilter, setActionTypeFilter] = useState("all"); // 'all', 'ai_chat', 'case_generation', 'legal_search', 'evidence_upload', 'fir_generation'
   const [sortOrder, setSortOrder] = useState("newest"); // 'newest', 'oldest'
 
-  useEffect(() => {
-    loadData();
-  }, [activeTab]);
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
-  const loadData = async () => {
+  useEffect(() => {
+    loadHistory();
+  }, []);
+
+  const loadHistory = async () => {
     setLoading(true);
-    setError("");
     try {
-      if (activeTab === "chats") {
-        const data = await api.getChatHistory(null, "general_assistant");
-        setChats(data);
-      } else {
-        const data = await api.getCases();
-        setCases(data);
-      }
+      const data = await api.getHistory(actionTypeFilter, searchQuery);
+      setHistoryItems(data);
     } catch (err) {
-      setError("Failed to load historical archives: " + err.message);
+      setToast({ type: "error", message: "Failed to load history items: " + err.message });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteChat = async (chatId) => {
-    if (!window.confirm("Are you sure you want to delete this chat transcript entry?")) return;
-    setError("");
-    setSuccessMsg("");
+  const handleDeleteItem = async (e, id) => {
+    e.stopPropagation();
     try {
-      await api.deleteChatHistory(chatId);
-      setSuccessMsg("Chat entry deleted successfully.");
-      loadData();
+      await api.deleteHistoryItem(id);
+      setToast({ type: "success", message: "History item deleted successfully." });
+      loadHistory();
     } catch (err) {
-      setError("Delete failed: " + err.message);
+      setToast({ type: "error", message: "Delete failed: " + err.message });
     }
   };
 
-  const handleExportPDF = (chat) => {
-    const formattedMessages = [
-      { role: "user", content: chat.user_message, timestamp: new Date(chat.created_at).toLocaleString() },
-      { role: "assistant", content: chat.bot_response, timestamp: new Date(chat.created_at).toLocaleString() }
-    ];
-    api.exportChatPDF(formattedMessages, chat.case_id ? `Case #${chat.case_id}` : "General Legal Consultation");
+  const handleClearAll = async () => {
+    if (!window.confirm("Are you sure you want to permanently clear all history records?")) return;
+    try {
+      await api.clearAllHistory();
+      setToast({ type: "success", message: "All history records cleared successfully." });
+      loadHistory();
+    } catch (err) {
+      setToast({ type: "error", message: "Clear failed: " + err.message });
+    }
   };
 
-  // Filter and Sort Chat Sessions
-  const filteredChats = chats
-    .filter((c) => {
+  const handleReopenSession = (item) => {
+    if (item.action_type === "ai_chat") {
+      navigate("/assistant");
+    } else if (item.action_type === "case_generation" || item.action_type === "fir_generation") {
+      if (item.case_id) {
+        navigate(`/fir-generator?caseId=${item.case_id}`);
+      } else {
+        navigate("/cases");
+      }
+    } else if (item.action_type === "evidence_upload") {
+      if (item.case_id) {
+        navigate(`/evidence?caseId=${item.case_id}`);
+      } else {
+        navigate("/evidence");
+      }
+    } else if (item.action_type === "legal_search") {
+      navigate("/legal-search");
+    } else {
+      navigate("/dashboard");
+    }
+  };
+
+  const getActionBadge = (type) => {
+    switch (type) {
+      case "ai_chat":
+        return { label: "AI Chat", color: "bg-blue-50 text-blue-700 border-blue-200" };
+      case "case_generation":
+        return { label: "Case File", color: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+      case "legal_search":
+        return { label: "Legal Search", color: "bg-purple-50 text-purple-700 border-purple-200" };
+      case "evidence_upload":
+        return { label: "Evidence Upload", color: "bg-indigo-50 text-indigo-700 border-indigo-200" };
+      case "fir_generation":
+        return { label: "FIR Draft", color: "bg-amber-50 text-amber-800 border-amber-200" };
+      default:
+        return { label: "System Action", color: "bg-slate-100 text-slate-700 border-slate-300" };
+    }
+  };
+
+  // Filter & Sort
+  const filteredItems = historyItems
+    .filter((item) => {
       const q = searchQuery.toLowerCase().trim();
-      const matchesSearch = 
+      const matchesSearch =
         !q ||
-        c.user_message.toLowerCase().includes(q) ||
-        (c.bot_response && c.bot_response.toLowerCase().includes(q)) ||
-        (c.case_id && c.case_id.toString().includes(q));
-      
-      const matchesType = typeFilter === "all" || c.message_type === typeFilter;
+        item.title.toLowerCase().includes(q) ||
+        (item.action && item.action.toLowerCase().includes(q)) ||
+        (item.case_id && item.case_id.toString().includes(q));
+
+      const matchesType = actionTypeFilter === "all" || item.action_type === actionTypeFilter;
       return matchesSearch && matchesType;
     })
     .sort((a, b) => {
-      const dateA = new Date(a.created_at).getTime();
-      const dateB = new Date(b.created_at).getTime();
+      const dateA = new Date(a.timestamp).getTime();
+      const dateB = new Date(b.timestamp).getTime();
       return sortOrder === "newest" ? dateB - dateA : dateA - dateB;
     });
 
-  // Filter and Sort Cases
-  const filteredCases = cases
-    .filter((c) => {
-      const q = searchQuery.toLowerCase().trim();
-      return (
-        !q ||
-        c.id.toString().includes(q) ||
-        c.title.toLowerCase().includes(q) ||
-        (c.location && c.location.toLowerCase().includes(q)) ||
-        (c.description && c.description.toLowerCase().includes(q))
-      );
-    })
-    .sort((a, b) => {
-      const dateA = new Date(a.created_at).getTime();
-      const dateB = new Date(b.created_at).getTime();
-      return sortOrder === "newest" ? dateB - dateA : dateA - dateB;
-    });
+  // Pagination Logic
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / itemsPerPage));
+  const paginatedItems = filteredItems.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   return (
     <div className="space-y-6 font-sans select-none pb-12">
       
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E2E8F0] pb-6">
+      {/* Page Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-6">
         <div>
           <div className="flex items-center gap-2">
-            <FolderSearch className="h-5 w-5 text-[#2563EB]" />
-            <h1 className="text-xl font-bold tracking-tight text-[#111827]">Historical Investigation Archives</h1>
+            <FolderSearch className="h-5 w-5 text-blue-600" />
+            <h1 className="text-xl font-bold tracking-tight text-slate-900">Historical Activity & Audit Logs</h1>
           </div>
-          <p className="text-xs text-[#6B7280] mt-1">Review legal Q&A transcripts, case dossier archives, and audit history logs.</p>
+          <p className="text-xs text-slate-500 mt-1">
+            Review past AI chats, legal searches, case dossiers, and evidence uploads. Click any log entry to reopen the session.
+          </p>
         </div>
 
-        <button
-          onClick={loadData}
-          disabled={loading}
-          className="saas-card saas-card-hover px-4 py-2.5 flex items-center gap-2 text-xs font-semibold text-[#1E293B] cursor-pointer"
-        >
-          <RefreshCw className={`h-4 w-4 text-[#2563EB] ${loading ? 'animate-spin' : ''}`} />
-          <span>Refresh Archive Feeds</span>
-        </button>
+        <div className="flex items-center gap-3">
+          {historyItems.length > 0 && (
+            <button
+              onClick={handleClearAll}
+              className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs cursor-pointer transition-colors flex items-center gap-1.5"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Clear All History</span>
+            </button>
+          )}
+
+          <button
+            onClick={loadHistory}
+            disabled={loading}
+            className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs cursor-pointer shadow-xs flex items-center gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 text-blue-600 ${loading ? 'animate-spin' : ''}`} />
+            <span>Reload Logs</span>
+          </button>
+        </div>
       </div>
 
-      {/* Alerts */}
-      {error && (
-        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
-          <AlertCircle className="h-4.5 w-4.5 shrink-0 text-rose-600" />
-          <span>{error}</span>
-        </div>
-      )}
-      {successMsg && (
-        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
-          <CheckCircle2 className="h-4.5 w-4.5 shrink-0 text-emerald-600" />
-          <span>{successMsg}</span>
-        </div>
-      )}
-
-      {/* Archive Category Tabs */}
-      <div className="flex border-b border-[#E2E8F0] space-x-6 text-xs font-semibold">
-        <button
-          onClick={() => setActiveTab("chats")}
-          className={`pb-3.5 flex items-center gap-2 cursor-pointer transition-all ${activeTab === 'chats' ? 'border-b-2 border-[#2563EB] text-[#2563EB]' : 'text-[#64748B] hover:text-[#1E293B]'}`}
-        >
-          <MessageSquare className="h-4 w-4" />
-          <span>AI Legal Assistance Chat History ({chats.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("cases")}
-          className={`pb-3.5 flex items-center gap-2 cursor-pointer transition-all ${activeTab === 'cases' ? 'border-b-2 border-[#2563EB] text-[#2563EB]' : 'text-[#64748B] hover:text-[#1E293B]'}`}
-        >
-          <FileText className="h-4 w-4" />
-          <span>Case Investigation Archives ({cases.length})</span>
-        </button>
-      </div>
-
-      {/* Control Bar: Search, Filters & Sorting */}
-      <div className="flex flex-col md:flex-row gap-3 bg-white p-4 rounded-2xl border border-[#E2E8F0] shadow-sm">
+      {/* Search & Action Filter Controls */}
+      <div className="flex flex-col md:flex-row gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
         
         <div className="relative flex-1">
-          <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-[#9CA3AF]">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
             <Search className="h-4 w-4" />
           </span>
           <input
             type="text"
-            placeholder={activeTab === "chats" ? "Search chat messages, questions, responses, or Case ID..." : "Search case titles, numbers, locations..."}
+            placeholder="Search by action title, keyword, or Case ID..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
             className="w-full saas-input pl-9 pr-4 py-2 text-xs"
           />
         </div>
 
-        {activeTab === "chats" && (
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="saas-input px-3.5 py-2 text-xs font-semibold cursor-pointer"
-          >
-            <option value="all">All Chat Types</option>
-            <option value="general_assistant">General Legal Q&A</option>
-            <option value="sop">Case SOP Guidance</option>
-          </select>
-        )}
+        <select
+          value={actionTypeFilter}
+          onChange={(e) => { setActionTypeFilter(e.target.value); setCurrentPage(1); }}
+          className="saas-input px-3.5 py-2 text-xs font-semibold cursor-pointer"
+        >
+          <option value="all">All Action Types ({historyItems.length})</option>
+          <option value="ai_chat">AI Assistant Chats</option>
+          <option value="case_generation">Case Dossier Creation</option>
+          <option value="legal_search">Legal Code Searches</option>
+          <option value="evidence_upload">Evidence File Uploads</option>
+          <option value="fir_generation">FIR Generation Drafts</option>
+        </select>
 
         <button
           onClick={() => setSortOrder(prev => prev === "newest" ? "oldest" : "newest")}
-          className="px-3.5 py-2 rounded-xl border border-[#E2E8F0] hover:bg-[#F8FAFC] text-xs font-semibold text-[#475569] flex items-center gap-2 cursor-pointer transition-all shrink-0"
+          className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-2 cursor-pointer transition-all shrink-0"
         >
-          <ArrowUpDown className="h-3.5 w-3.5 text-[#2563EB]" />
+          <ArrowUpDown className="h-3.5 w-3.5 text-blue-600" />
           <span>Sort: {sortOrder === "newest" ? "Newest First" : "Oldest First"}</span>
         </button>
 
       </div>
 
-      {/* TAB 1: CHAT HISTORY */}
-      {activeTab === "chats" && (
-        <>
-          {loading ? (
-            <div className="text-center py-16 text-xs font-semibold text-[#6B7280] animate-pulse">LOADING CHAT TRANSCRIPTS...</div>
-          ) : filteredChats.length === 0 ? (
-            <div className="bg-white p-16 rounded-2xl border border-[#E2E8F0] text-center text-xs text-[#6B7280] space-y-3">
-              <div className="h-12 w-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
-                <MessageSquare className="h-6 w-6" />
-              </div>
-              <div className="space-y-1">
-                <p className="font-bold text-slate-900 text-sm">No Saved Conversation History</p>
-                <p className="text-slate-500 max-w-sm mx-auto">
-                  You have not performed any AI assistant inquiries yet matching your query. Ask questions in the AI Assistant module to start logging transcripts.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {filteredChats.map((chat) => (
-                <div key={chat.id} className="bg-white p-5 rounded-2xl border border-[#E2E8F0] shadow-sm hover:border-[#CBD5E1] transition-all space-y-4">
-                  
-                  {/* Card Header */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#F1F5F9] pb-3 text-xs">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-[#111827] flex items-center gap-1">
-                        <User className="h-3.5 w-3.5 text-[#2563EB]" />
-                        <span>Officer: @{currentUsername}</span>
+      {/* History Items Feed */}
+      {loading ? (
+        <div className="text-center py-16 text-xs font-mono font-semibold text-slate-500 animate-pulse">
+          QUERYING HISTORICAL ACTIVITY LOGS...
+        </div>
+      ) : paginatedItems.length === 0 ? (
+        <div className="bg-white p-16 rounded-2xl border border-slate-200 text-center text-xs text-slate-500 space-y-3">
+          <div className="h-12 w-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+            <MessageSquare className="h-6 w-6" />
+          </div>
+          <div className="space-y-1">
+            <p className="font-bold text-slate-900 text-sm">No History Records Found</p>
+            <p className="text-slate-500 max-w-sm mx-auto">
+              No historical session logs match your query. Perform actions in the portal to populate activity entries.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {paginatedItems.map((item) => {
+            const badge = getActionBadge(item.action_type);
+            return (
+              <div 
+                key={item.id}
+                onClick={() => handleReopenSession(item)}
+                className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-blue-300 transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+              >
+                <div className="space-y-1 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap text-xs">
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border uppercase font-mono ${badge.color}`}>
+                      {badge.label}
+                    </span>
+                    {item.case_id && (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold border bg-purple-50 text-purple-700 border-purple-200 font-mono">
+                        Case #{item.case_id}
                       </span>
-                      <span className="text-[#94A3B8]">•</span>
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE] uppercase font-mono">
-                        {chat.message_type === 'sop' ? 'SOP Guidance' : 'General Legal Q&A'}
-                      </span>
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border bg-slate-100 text-slate-700 border-slate-300 font-mono">
-                        Messages: 2
-                      </span>
-                      {chat.case_id && (
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border bg-[#F5F3FF] text-[#7C3AED] border-[#DDD6FE] font-mono">
-                          Case Number #{chat.case_id}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2 text-[10px] font-mono text-[#64748B]">
-                      <Clock className="h-3.5 w-3.5 text-[#9CA3AF]" />
-                      <span>{new Date(chat.created_at).toLocaleString()}</span>
-                    </div>
+                    )}
+                    <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      <span>{new Date(item.timestamp).toLocaleString()}</span>
+                    </span>
                   </div>
 
-                  {/* Message Content */}
-                  <div className="space-y-2 text-xs">
-                    <div className="p-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] space-y-1">
-                      <span className="text-[10px] font-mono font-bold text-[#475569] uppercase block">OFFICER QUERY:</span>
-                      <p className="font-medium text-[#1E293B] leading-relaxed">{chat.user_message}</p>
-                    </div>
-
-                    <div className="p-3.5 rounded-xl bg-[#EFF6FF]/60 border border-[#BFDBFE]/60 space-y-1">
-                      <span className="text-[10px] font-mono font-bold text-[#1E40AF] uppercase block">CRIMEGPT LEGAL INTELLIGENCE RESPONSE:</span>
-                      <p className="text-[#1E3A8A] leading-relaxed line-clamp-3 whitespace-pre-wrap">{chat.bot_response}</p>
-                    </div>
-                  </div>
-
-                  {/* Card Actions */}
-                  <div className="flex items-center justify-between pt-2 border-t border-[#F1F5F9]">
-                    <span className="text-[10px] font-mono text-[#94A3B8]">TRANSCRIPT ID: #{chat.id}</span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleExportPDF(chat)}
-                        className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer flex items-center gap-1.5 transition-all shadow-xs"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                        <span>Export PDF</span>
-                      </button>
-                      <button
-                        onClick={() => handleExportChat(chat)}
-                        className="px-3 py-1.5 rounded-lg bg-white border border-[#CBD5E1] text-[#334155] hover:bg-[#F8FAFC] font-semibold text-xs cursor-pointer flex items-center gap-1.5 transition-all shadow-xs"
-                      >
-                        <Download className="h-3.5 w-3.5 text-[#2563EB]" />
-                        <span>Export TXT</span>
-                      </button>
-                      <button
-                        onClick={() => handleDeleteChat(chat.id)}
-                        className="p-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 cursor-pointer transition-all"
-                        title="Delete chat log entry"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-
+                  <h3 className="text-xs font-bold text-slate-900 line-clamp-2 leading-relaxed">
+                    {item.title}
+                  </h3>
                 </div>
-              ))}
-            </div>
-          )}
-        </>
+
+                <div className="flex items-center gap-2 self-end sm:self-center">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleReopenSession(item); }}
+                    className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs cursor-pointer flex items-center gap-1 transition-colors"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    <span>Reopen Session</span>
+                  </button>
+
+                  <button
+                    onClick={(e) => handleDeleteItem(e, item.id)}
+                    className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 cursor-pointer transition-colors"
+                    title="Delete log item"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
 
-      {/* TAB 2: CASE INVESTIGATION ARCHIVES */}
-      {activeTab === "cases" && (
-        <>
-          {loading ? (
-            <div className="text-center py-16 text-xs font-semibold text-[#6B7280] animate-pulse">LOADING CASE DOSSIERS...</div>
-          ) : filteredCases.length === 0 ? (
-            <div className="bg-white p-16 rounded-2xl border border-[#E2E8F0] text-center text-xs text-[#6B7280] italic">
-              No archived investigation dossiers match current filters.
-            </div>
-          ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredCases.map((c) => (
-                <div 
-                  key={c.id}
-                  onClick={() => navigate(`/fir-generator?caseId=${c.id}`)}
-                  className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-6 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between border-b border-[#F1F5F9] pb-2">
-                      <span className="text-[10px] font-mono font-bold text-[#6B7280]">CASE ID: #{c.id}</span>
-                      <span className="px-2.5 py-0.5 rounded-full text-[9px] font-bold border uppercase bg-[#ECFDF5] text-[#047857] border-[#A7F3D0]">
-                        {c.status || 'ARCHIVED'}
-                      </span>
-                    </div>
-                    <h3 className="text-sm font-bold text-[#111827] line-clamp-1">{c.title}</h3>
-                    <div className="space-y-1 text-[10px] text-[#6B7280]">
-                      <div className="flex items-center gap-1.5">
-                        <Calendar className="h-3.5 w-3.5 text-[#9CA3AF]" />
-                        <span>Date: {c.date || "N/A"}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <MapPin className="h-3.5 w-3.5 text-[#9CA3AF]" />
-                        <span className="truncate">Location: {c.location || "N/A"}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="border-t border-[#F1F5F9] pt-4 mt-4 text-right">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); navigate(`/fir-generator?caseId=${c.id}`); }}
-                      className="text-xs font-bold text-[#2563EB] hover:underline"
-                    >
-                      View Full Dossier &rarr;
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 text-xs font-semibold">
+          <span className="text-slate-500 font-mono">
+            Showing Page {currentPage} of {totalPages} ({filteredItems.length} total logs)
+          </span>
+
+          <div className="flex items-center gap-2">
+            <button
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              className={`p-2 rounded-xl border flex items-center justify-center transition-all ${
+                currentPage === 1 ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300 cursor-pointer'
+              }`}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+
+            <button
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              className={`p-2 rounded-xl border flex items-center justify-center transition-all ${
+                currentPage === totalPages ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300 cursor-pointer'
+              }`}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
       )}
+
+      {/* Global Toast Notification */}
+      <Toast toast={toast} onClose={() => setToast(null)} />
 
     </div>
   );

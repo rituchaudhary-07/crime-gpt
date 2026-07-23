@@ -4,6 +4,7 @@ import {
   HelpCircle, Copy, FileText, Upload, Image, Mic, Repeat, CheckSquare
 } from "lucide-react";
 import { api } from "../utils/api";
+import Toast from "../components/Toast";
 
 export default function AIAssistant() {
   const [messages, setMessages] = useState([]);
@@ -14,6 +15,13 @@ export default function AIAssistant() {
   // Citation details drawer slide-out state
   const [activeCitation, setActiveCitation] = useState(null); // stores citation dict
   const [copiedIndex, setCopiedIndex] = useState(null);
+
+  // Upload state with AbortController
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [toast, setToast] = useState(null);
+  const abortControllerRef = useRef(null);
 
   const suggestedPrompts = [
     "What is the procedure for e-FIR signing under BNSS 173?",
@@ -40,6 +48,77 @@ export default function AIAssistant() {
     } catch (err) {
       console.log("Failed loading chat history:", err);
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelUpload = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    setUploading(false);
+    setUploadProgress(0);
+    setSelectedFile(null);
+    setToast({ type: "info", message: "File upload cancelled successfully." });
+  };
+
+  const handleFileUpload = async (file) => {
+    if (!file) return;
+    
+    // Check 20MB limit
+    if (file.size > 20 * 1024 * 1024) {
+      setToast({ type: "error", message: "File size exceeds maximum allowed limit of 20MB." });
+      return;
+    }
+
+    const allowed = [".jpg", ".jpeg", ".png", ".pdf", ".docx"];
+    const ext = "." + file.name.split(".").pop().toLowerCase();
+    if (!allowed.includes(ext)) {
+      setToast({ type: "error", message: "Invalid file extension. Supported formats: JPG, PNG, PDF, DOCX" });
+      return;
+    }
+
+    setSelectedFile(file);
+    setUploading(true);
+    setUploadProgress(20);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      setUploadProgress(50);
+      const res = await api.uploadChatAttachment(file, controller.signal);
+      setUploadProgress(100);
+
+      const attachmentMsg = {
+        role: "user",
+        content: `[Attached ${res.file_type} File: ${res.filename} (${res.size_kb} KB) - ${res.status}]`,
+        attachment: res,
+        timestamp: new Date(),
+        citations: []
+      };
+      setMessages(prev => [...prev, attachmentMsg]);
+      setToast({ type: "success", message: `File '${file.name}' uploaded successfully.` });
+
+      // Trigger AI Analysis of uploaded file
+      setLoading(true);
+      const aiRes = await api.generalChat(`Analyze uploaded ${res.file_type} evidence file '${res.filename}' (${res.status}). Provide preliminary legal assessment and evidence chain guidelines.`);
+      setMessages(prev => [...prev, {
+        role: "assistant",
+        content: aiRes.response,
+        timestamp: new Date(),
+        citations: aiRes.citations || []
+      }]);
+    } catch (err) {
+      if (err.name === "AbortError") {
+        setToast({ type: "info", message: "Upload aborted." });
+      } else {
+        setToast({ type: "error", message: "Upload failed: " + err.message });
+      }
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+      setSelectedFile(null);
       setLoading(false);
     }
   };
@@ -139,18 +218,46 @@ export default function AIAssistant() {
         </div>
 
         {/* Attachments & Export Actions */}
-        <div className="p-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl space-y-2 text-[10px]">
+        <div className="p-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl space-y-3 text-[10px]">
           <span className="font-bold text-[#4B5563] block">SECURE CHAT OPTIONS</span>
+          
+          {/* Upload Progress & Cancel Banner */}
+          {uploading && (
+            <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="font-bold text-blue-900 truncate max-w-[120px]">{selectedFile?.name}</span>
+                <button
+                  type="button"
+                  onClick={handleCancelUpload}
+                  className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded cursor-pointer text-[9px]"
+                >
+                  Cancel
+                </button>
+              </div>
+              <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                <div className="bg-blue-600 h-1.5 transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-2">
             <button 
+              disabled={messages.length === 0}
               onClick={() => {
-                if (messages.length === 0) {
-                  alert("No chat conversation messages to export yet.");
-                  return;
+                if (messages.length === 0) return;
+                try {
+                  api.exportChatPDF(messages, "CrimeGPT Assistant Transcript");
+                  setToast({ type: "success", message: "Chat transcript PDF exported successfully." });
+                } catch (err) {
+                  setToast({ type: "error", message: "Export failed: " + err.message });
                 }
-                api.exportChatPDF(messages, "CrimeGPT Assistant Transcript");
               }}
-              className="flex items-center justify-center gap-1.5 p-2 bg-white border border-[#E2E8F0] hover:border-blue-300 hover:text-blue-600 rounded-lg text-[#4B5563] font-bold cursor-pointer transition-colors"
+              className={`flex items-center justify-center gap-1.5 p-2 border rounded-lg font-bold transition-colors ${
+                messages.length === 0 
+                  ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed" 
+                  : "bg-white border-[#E2E8F0] hover:border-blue-300 hover:text-blue-600 text-[#4B5563] cursor-pointer"
+              }`}
+              title={messages.length === 0 ? "No chat messages to export" : "Export chat as PDF"}
             >
               <Upload className="h-3.5 w-3.5" />
               <span>PDF Logs</span>
@@ -163,35 +270,10 @@ export default function AIAssistant() {
                 type="file"
                 accept=".jpg,.jpeg,.png,.pdf,.docx"
                 className="hidden"
-                onChange={async (e) => {
-                  const file = e.target.files[0];
-                  if (!file) return;
-                  try {
-                    setLoading(true);
-                    const res = await api.uploadChatAttachment(file);
-                    const attachmentMsg = {
-                      role: "user",
-                      content: `[Attached ${res.file_type} File: ${res.filename} (${res.size_kb} KB) - ${res.status}]`,
-                      attachment: res,
-                      timestamp: new Date(),
-                      citations: []
-                    };
-                    setMessages(prev => [...prev, attachmentMsg]);
-                    
-                    // Trigger AI Analysis of uploaded file
-                    const aiRes = await api.generalChat(`Analyze uploaded ${res.file_type} evidence file '${res.filename}' (${res.status}). Provide preliminary legal assessment and evidence chain guidelines.`);
-                    setMessages(prev => [...prev, {
-                      role: "assistant",
-                      content: aiRes.response,
-                      timestamp: new Date(),
-                      citations: aiRes.citations || []
-                    }]);
-                  } catch (err) {
-                    alert("Upload failed: " + err.message);
-                  } finally {
-                    setLoading(false);
-                    e.target.value = "";
-                  }
+                disabled={uploading}
+                onChange={(e) => {
+                  if (e.target.files[0]) handleFileUpload(e.target.files[0]);
+                  e.target.value = "";
                 }}
               />
             </label>
@@ -412,6 +494,9 @@ export default function AIAssistant() {
           </div>
         </div>
       )}
+
+      {/* Global Toast Notification */}
+      <Toast toast={toast} onClose={() => setToast(null)} />
 
     </div>
   );

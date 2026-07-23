@@ -8,6 +8,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, Response, UploadFil
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import Response, FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from backend.ai_service import AIService
@@ -35,6 +36,14 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="CrimeGPT API", version="1.0.0")
 
+# Upload directory setup
+BASE_DIR = Path(__file__).resolve().parent
+UPLOAD_DIR = BASE_DIR / "db" / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# Mount Static Files for Uploads
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
 # CORS setup for React frontend
 app.add_middleware(
     CORSMiddleware,
@@ -43,21 +52,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Security Headers Middleware
-@app.middleware("http")
-async def add_security_headers(request: Request, call_next):
-    response = await call_next(request)
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    return response
-
-# Upload directory setup
-BASE_DIR = Path(__file__).resolve().parent
-UPLOAD_DIR = BASE_DIR / "db" / "uploads"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # Helper to log actions
 def log_audit(
@@ -201,6 +195,7 @@ class UserResponse(BaseModel):
     designation: Optional[str] = None
     role: str
     status: Optional[str] = "approved"
+    approved_at: Optional[datetime] = None
     created_at: datetime
     
     class Config:
@@ -474,9 +469,15 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
         log_audit(db, user.username, "LOGIN_REJECTED_PENDING", "Login blocked: Account awaiting admin approval", ip_address=client_ip, user_agent=user_agent)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Your account is awaiting administrator approval."
+            detail="Your account is waiting for administrator approval."
         )
-    elif user_status in ["rejected", "suspended", "disabled"]:
+    elif user_status == "rejected":
+        log_audit(db, user.username, "LOGIN_REJECTED_REJECTED", "Login blocked: Account rejected", ip_address=client_ip, user_agent=user_agent)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your registration was rejected. Contact administrator."
+        )
+    elif user_status in ["suspended", "disabled"]:
         log_audit(db, user.username, f"LOGIN_REJECTED_{user_status.upper()}", f"Login blocked: Account {user_status}", ip_address=client_ip, user_agent=user_agent)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -1204,11 +1205,122 @@ def get_chat_history(
         })
     return serialized
 
+@app.get("/api/history")
+def get_user_history(
+    action_type: Optional[str] = None,
+    q: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    logs = db.query(Log).filter(Log.user == current_user.username).all()
+    chats = db.query(ChatMessage).filter(ChatMessage.user_id == current_user.id, ChatMessage.role == "user").all()
+    
+    history_items = []
+    
+    for l in logs:
+        act_type = "system_action"
+        if "CREATE_CASE" in l.action or "ANALYZE_CASE" in l.action:
+            act_type = "case_generation"
+        elif "EVIDENCE" in l.action or "ATTACHMENT" in l.action:
+            act_type = "evidence_upload"
+        elif "FIR" in l.action:
+            act_type = "fir_generation"
+        elif "SEARCH" in l.action or "LEGAL" in l.action:
+            act_type = "legal_search"
+            
+        history_items.append({
+            "id": f"log_{l.id}",
+            "raw_id": l.id,
+            "item_type": "log",
+            "title": l.details or l.action,
+            "action_type": act_type,
+            "action": l.action,
+            "timestamp": l.timestamp.isoformat() if hasattr(l.timestamp, 'isoformat') else str(l.timestamp),
+            "case_id": l.case_id,
+            "metadata": {"details": l.details, "ip": l.ip_address}
+        })
+        
+    for c in chats:
+        history_items.append({
+            "id": f"chat_{c.id}",
+            "raw_id": c.id,
+            "item_type": "chat",
+            "title": c.content[:90] + ("..." if len(c.content) > 90 else ""),
+            "action_type": "ai_chat",
+            "action": "AI_CHAT_QUERY",
+            "timestamp": c.timestamp.isoformat() if hasattr(c.timestamp, 'isoformat') else str(c.timestamp),
+            "case_id": c.case_id,
+            "metadata": {"full_message": c.content, "message_type": c.message_type}
+        })
+        
+    history_items.sort(key=lambda x: x["timestamp"], reverse=True)
+    
+    if action_type and action_type != "all":
+        history_items = [h for h in history_items if h["action_type"] == action_type]
+        
+    if q:
+        query_str = q.lower().strip()
+        history_items = [
+            h for h in history_items 
+            if query_str in h["title"].lower() or query_str in h["action"].lower()
+        ]
+        
+    return history_items
+
+@app.delete("/api/history/{item_id}")
+def delete_history_item(
+    item_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if item_id.startswith("chat_"):
+        raw_id = int(item_id.replace("chat_", ""))
+        chat = db.query(ChatMessage).filter(ChatMessage.id == raw_id, ChatMessage.user_id == current_user.id).first()
+        if chat:
+            db.delete(chat)
+            db.commit()
+    elif item_id.startswith("log_"):
+        raw_id = int(item_id.replace("log_", ""))
+        log_entry = db.query(Log).filter(Log.id == raw_id, Log.user == current_user.username).first()
+        if log_entry:
+            db.delete(log_entry)
+            db.commit()
+    elif item_id.isdigit():
+        raw_id = int(item_id)
+        db.query(ChatMessage).filter(ChatMessage.id == raw_id, ChatMessage.user_id == current_user.id).delete()
+        db.query(Log).filter(Log.id == raw_id, Log.user == current_user.username).delete()
+        db.commit()
+            
+    return {"message": "History item deleted successfully"}
+
+@app.delete("/api/history")
+def clear_all_history(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    db.query(ChatMessage).filter(ChatMessage.user_id == current_user.id).delete()
+    db.query(Log).filter(Log.user == current_user.username).delete()
+    db.commit()
+    
+    create_notification(
+        db, current_user.id, "History Cleared", 
+        "All historical logs and conversation transcripts have been deleted.", 
+        type="history_deleted"
+    )
+    return {"message": "All history records cleared successfully"}
+
 # --- LEGAL SEARCH & SECTION MAPS ---
 
 @app.get("/api/legal/search")
-def get_legal_search(query: str, api_key: Optional[str] = ""):
+def get_legal_search(query: str, api_key: Optional[str] = "", current_user: Optional[User] = Depends(get_current_user), db: Session = Depends(get_db)):
     matched = search_laws(query, api_key, top_k=6)
+    if current_user:
+        create_notification(
+            db, current_user.id, "Legal Code Search Executed",
+            f"Searched criminal code provisions for: '{query}'",
+            type="legal_search"
+        )
+        log_audit(db, current_user.username, "LEGAL_SEARCH", f"Searched legal sections for '{query}'")
     return matched
 
 @app.get("/api/legal/mapping")
@@ -1734,30 +1846,36 @@ def export_chat_pdf(payload: ChatPdfExportRequest, current_user: User = Depends(
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
 
 @app.post("/api/chat/upload-attachment")
+@app.post("/api/upload")
 def upload_chat_attachment(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # Allowed File Extensions & Size limit (10 MB)
+    # Allowed File Extensions & Size limit (20 MB)
     allowed_exts = {".png", ".jpg", ".jpeg", ".pdf", ".docx"}
     ext = Path(file.filename).suffix.lower()
     if ext not in allowed_exts:
         raise HTTPException(status_code=400, detail=f"Invalid file type. Allowed extensions: {', '.join(allowed_exts)}")
         
     contents = file.file.read()
-    if len(contents) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File size exceeds maximum allowed limit of 10MB.")
+    if len(contents) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size exceeds maximum allowed limit of 20MB.")
         
-    # Security Scan Simulation (Mock Anti-virus)
     filename_clean = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.filename}"
     file_path = UPLOAD_DIR / filename_clean
     with open(file_path, "wb") as f:
         f.write(contents)
         
-    file_url = f"/api/evidence/download/{filename_clean}"
+    file_url = f"/uploads/{filename_clean}"
     
-    log_audit(db, current_user.username, "CHAT_ATTACHMENT_UPLOADED", f"Uploaded attachment '{file.filename}' for AI analysis")
+    create_notification(
+        db, current_user.id, "Evidence File Uploaded", 
+        f"Uploaded evidence attachment '{file.filename}' ({round(len(contents)/1024, 1)} KB).",
+        type="evidence_uploaded"
+    )
+    
+    log_audit(db, current_user.username, "CHAT_ATTACHMENT_UPLOADED", f"Uploaded attachment '{file.filename}' ({round(len(contents)/1024, 1)} KB)")
     
     return {
         "filename": file.filename,
