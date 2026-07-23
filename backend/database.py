@@ -141,18 +141,35 @@ class EvidenceItem(Base):
     # Relationships
     case = relationship("Case", back_populates="evidence_items")
 
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(String, unique=True, index=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    title = Column(String, nullable=False, default="New Legal Consultation")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationship
+    messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
+
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     case_id = Column(Integer, ForeignKey("cases.id"), nullable=True)
+    session_id = Column(String, ForeignKey("chat_sessions.session_id"), nullable=True, index=True)
     message_type = Column(String, default="general_assistant")  # general_assistant, sop_guidance
     role = Column(String, nullable=False)  # user, assistant
     content = Column(Text, nullable=False)
     citations = Column(Text, nullable=True)  # JSON-encoded array of citations
     attachments = Column(Text, nullable=True)  # JSON-encoded list of attached file info
     timestamp = Column(DateTime, default=datetime.utcnow)
+
+    # Relationship
+    session = relationship("ChatSession", back_populates="messages")
 
 class Log(Base):
     __tablename__ = "logs"

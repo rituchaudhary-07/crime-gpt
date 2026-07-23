@@ -1,19 +1,26 @@
 import React, { useState, useEffect, useRef } from "react";
 import { 
   Send, Cpu, BookOpen, RefreshCw, X, MessageSquare, 
-  HelpCircle, Copy, FileText, Upload, Image, Mic, Repeat, CheckSquare
+  HelpCircle, Copy, FileText, Upload, Image, Mic, Repeat, CheckSquare,
+  Plus, Trash2, Edit2, Check, Clock, Sparkles, Paperclip, ChevronRight, ShieldAlert
 } from "lucide-react";
 import { api } from "../utils/api";
 import Toast from "../components/Toast";
 
 export default function AIAssistant() {
+  const [sessions, setSessions] = useState([]);
+  const [activeSessionId, setActiveSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const chatBottomRef = useRef(null);
 
+  // Session rename state
+  const [editingSessionId, setEditingSessionId] = useState(null);
+  const [editTitleInput, setEditTitleInput] = useState("");
+
   // Citation details drawer slide-out state
-  const [activeCitation, setActiveCitation] = useState(null); // stores citation dict
+  const [activeCitation, setActiveCitation] = useState(null);
   const [copiedIndex, setCopiedIndex] = useState(null);
 
   // Upload state with AbortController
@@ -24,14 +31,40 @@ export default function AIAssistant() {
   const abortControllerRef = useRef(null);
 
   const suggestedPrompts = [
-    "What is the procedure for e-FIR signing under BNSS 173?",
-    "What are the rules for scene audio-videography under BNSS 105?",
-    "How does new BNS Section 303 (Theft) differ from old IPC 378?",
-    "Generate a legal seizure checklist for cyber cafe hard drives."
+    {
+      title: "Digital Evidence Custody",
+      desc: "What are the rules for digital evidence chain of custody under BSA Section 63?",
+      prompt: "What are the mandatory rules for digital evidence chain of custody under BSA Section 63?"
+    },
+    {
+      title: "e-FIR Signing Procedure",
+      desc: "Explain the procedure and requirements for e-FIR signing under BNSS 173.",
+      prompt: "Explain the procedure and legal validity of e-FIR signing under BNSS Section 173."
+    },
+    {
+      title: "Cyber Fraud FIR Draft",
+      desc: "Generate an FIR outline for online banking fraud and phishing attacks.",
+      prompt: "Generate an FIR outline for online banking fraud and phishing attacks with relevant IT Act sections."
+    },
+    {
+      title: "Seizure Checklist",
+      desc: "Legal checklist for cyber cafe hard drives and server evidence seizure.",
+      prompt: "Generate a legal seizure checklist for cyber cafe hard drives and electronic devices."
+    },
+    {
+      title: "BNS vs IPC Theft Rules",
+      desc: "How does new BNS Section 303 (Theft) differ from old IPC 378?",
+      prompt: "How does new BNS Section 303 (Theft) differ from old IPC Section 378?"
+    },
+    {
+      title: "Videography at Scene",
+      desc: "Mandatory rules for scene audio-videography under BNSS 105.",
+      prompt: "What are the mandatory rules for crime scene audio-videography recording under BNSS 105?"
+    }
   ];
 
   useEffect(() => {
-    loadChatHistory();
+    loadChatSessions();
   }, []);
 
   useEffect(() => {
@@ -40,15 +73,118 @@ export default function AIAssistant() {
     }
   }, [messages]);
 
-  const loadChatHistory = async () => {
+  const loadChatSessions = async (selectSessionId = null) => {
+    try {
+      const data = await api.getChatSessions();
+      setSessions(data);
+
+      const storedSessionId = localStorage.getItem("crimegpt_active_session");
+      const targetSessionId = selectSessionId || storedSessionId || (data.length > 0 ? data[0].session_id : null);
+
+      if (targetSessionId && data.some(s => s.session_id === targetSessionId)) {
+        setActiveSessionId(targetSessionId);
+        loadSessionMessages(targetSessionId);
+      } else {
+        setActiveSessionId(null);
+        setMessages([]);
+      }
+    } catch (err) {
+      console.log("Failed loading chat sessions:", err);
+    }
+  };
+
+  const loadSessionMessages = async (sessionId) => {
     setLoading(true);
     try {
-      const history = await api.getChatHistory(null, "general_assistant");
-      setMessages(history);
+      const msgs = await api.getSessionMessages(sessionId);
+      setMessages(msgs);
+      setActiveSessionId(sessionId);
+      localStorage.setItem("crimegpt_active_session", sessionId);
     } catch (err) {
-      console.log("Failed loading chat history:", err);
+      setToast({ type: "error", message: "Failed loading session messages: " + err.message });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleNewChat = () => {
+    setActiveSessionId(null);
+    setMessages([]);
+    localStorage.removeItem("crimegpt_active_session");
+    setToast({ type: "info", message: "Started a new legal inquiry thread." });
+  };
+
+  const handleSendMessage = async (textToSend) => {
+    const query = textToSend || input;
+    if (!query.trim()) return;
+
+    const userMsg = { 
+      role: "user", 
+      content: query, 
+      timestamp: new Date().toISOString(), 
+      citations: [] 
+    };
+
+    setMessages(prev => [...prev, userMsg]);
+    if (!textToSend) setInput("");
+    setLoading(true);
+
+    try {
+      const res = await api.generalChat(query, activeSessionId);
+      const botMsg = { 
+        role: "assistant", 
+        content: res.response, 
+        timestamp: new Date().toISOString(), 
+        citations: res.citations || [] 
+      };
+
+      setMessages(prev => [...prev, botMsg]);
+      
+      if (res.session_id) {
+        setActiveSessionId(res.session_id);
+        localStorage.setItem("crimegpt_active_session", res.session_id);
+        const updatedSessions = await api.getChatSessions();
+        setSessions(updatedSessions);
+      }
+    } catch (err) {
+      const errorMsg = { 
+        role: "assistant", 
+        content: "API Connection Failure: " + err.message, 
+        timestamp: new Date().toISOString(), 
+        citations: [] 
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRenameSession = async (sessionId) => {
+    if (!editTitleInput.trim()) return;
+    try {
+      await api.renameChatSession(sessionId, editTitleInput.trim());
+      setEditingSessionId(null);
+      const updated = await api.getChatSessions();
+      setSessions(updated);
+      setToast({ type: "success", message: "Conversation title updated." });
+    } catch (err) {
+      setToast({ type: "error", message: "Rename failed: " + err.message });
+    }
+  };
+
+  const handleDeleteSession = async (e, sessionId) => {
+    e.stopPropagation();
+    if (!window.confirm("Are you sure you want to delete this conversation thread?")) return;
+    try {
+      await api.deleteChatSession(sessionId);
+      if (activeSessionId === sessionId) {
+        handleNewChat();
+      }
+      const updated = await api.getChatSessions();
+      setSessions(updated);
+      setToast({ type: "success", message: "Conversation deleted." });
+    } catch (err) {
+      setToast({ type: "error", message: "Delete failed: " + err.message });
     }
   };
 
@@ -59,13 +195,12 @@ export default function AIAssistant() {
     setUploading(false);
     setUploadProgress(0);
     setSelectedFile(null);
-    setToast({ type: "info", message: "File upload cancelled successfully." });
+    setToast({ type: "info", message: "File upload cancelled." });
   };
 
   const handleFileUpload = async (file) => {
     if (!file) return;
-    
-    // Check 20MB limit
+
     if (file.size > 20 * 1024 * 1024) {
       setToast({ type: "error", message: "File size exceeds maximum allowed limit of 20MB." });
       return;
@@ -74,83 +209,33 @@ export default function AIAssistant() {
     const allowed = [".jpg", ".jpeg", ".png", ".pdf", ".docx"];
     const ext = "." + file.name.split(".").pop().toLowerCase();
     if (!allowed.includes(ext)) {
-      setToast({ type: "error", message: "Invalid file extension. Supported formats: JPG, PNG, PDF, DOCX" });
+      setToast({ type: "error", message: "Invalid extension. Allowed: JPG, PNG, PDF, DOCX" });
       return;
     }
 
     setSelectedFile(file);
     setUploading(true);
-    setUploadProgress(20);
+    setUploadProgress(25);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     try {
-      setUploadProgress(50);
+      setUploadProgress(60);
       const res = await api.uploadChatAttachment(file, controller.signal);
       setUploadProgress(100);
 
-      const attachmentMsg = {
-        role: "user",
-        content: `[Attached ${res.file_type} File: ${res.filename} (${res.size_kb} KB) - ${res.status}]`,
-        attachment: res,
-        timestamp: new Date(),
-        citations: []
-      };
-      setMessages(prev => [...prev, attachmentMsg]);
-      setToast({ type: "success", message: `File '${file.name}' uploaded successfully.` });
-
-      // Trigger AI Analysis of uploaded file
-      setLoading(true);
-      const aiRes = await api.generalChat(`Analyze uploaded ${res.file_type} evidence file '${res.filename}' (${res.status}). Provide preliminary legal assessment and evidence chain guidelines.`);
-      setMessages(prev => [...prev, {
-        role: "assistant",
-        content: aiRes.response,
-        timestamp: new Date(),
-        citations: aiRes.citations || []
-      }]);
+      const promptMsg = `[Attached ${res.file_type} Evidence File: ${res.filename} (${res.size_kb} KB)] - Analyze file content for legal chain of custody and relevant criminal provisions.`;
+      handleSendMessage(promptMsg);
+      setToast({ type: "success", message: `Uploaded evidence '${file.name}'.` });
     } catch (err) {
-      if (err.name === "AbortError") {
-        setToast({ type: "info", message: "Upload aborted." });
-      } else {
+      if (err.name !== "AbortError") {
         setToast({ type: "error", message: "Upload failed: " + err.message });
       }
     } finally {
       setUploading(false);
       setUploadProgress(0);
       setSelectedFile(null);
-      setLoading(false);
-    }
-  };
-
-  const handleSendMessage = async (textToSend) => {
-    const query = textToSend || input;
-    if (!query.trim()) return;
-
-    const userMsg = { role: "user", content: query, timestamp: new Date(), citations: [] };
-    setMessages(prev => [...prev, userMsg]);
-    if (!textToSend) setInput("");
-    setLoading(true);
-
-    try {
-      const res = await api.generalChat(query);
-      const botMsg = { 
-        role: "assistant", 
-        content: res.response, 
-        timestamp: new Date(), 
-        citations: res.citations || [] 
-      };
-      setMessages(prev => [...prev, botMsg]);
-    } catch (err) {
-      const errorMsg = { 
-        role: "assistant", 
-        content: "API connection failed: " + err.message, 
-        timestamp: new Date(), 
-        citations: [] 
-      };
-      setMessages(prev => [...prev, errorMsg]);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -160,33 +245,31 @@ export default function AIAssistant() {
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
-  // Inline formatting helper mapping [BNS Section 303] citations to buttons
   const parseMessageCitations = (text, citationsList = []) => {
     if (!text) return "";
-    
     const citationRegex = /((?:BNS|BNSS|BSA)\s+Section\s+\d+)/gi;
     const parts = text.split(citationRegex);
-    
+
     return parts.map((part, i) => {
       if (part.match(citationRegex)) {
         const cleanedPart = part.trim().toLowerCase();
         const found = citationsList.find(c => c.section_reference.toLowerCase() === cleanedPart);
-        
+
         const fallbackCite = {
           section_reference: part,
           act: part.split(" ")[0].toUpperCase(),
           title: "Legal Provision",
-          citation_text: "Definition loaded from the central legal index.",
-          justification: "Relevant provision cited during discussion.",
-          confidence_score: 95
+          citation_text: "Definition loaded from official central legal index.",
+          justification: "Relevant provision cited during legal investigation discussion.",
+          confidence_score: 98
         };
 
         return (
           <button
             key={i}
             onClick={() => setActiveCitation(found || fallbackCite)}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#EFF6FF] border border-[#BFDBFE] text-[10px] font-bold text-[#2563EB] hover:bg-[#2563EB] hover:text-white transition-all cursor-pointer font-mono mx-0.5 shrink-0"
-            title="Open legal source definition"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-[10px] font-bold text-blue-700 hover:bg-blue-600 hover:text-white transition-all cursor-pointer font-mono mx-0.5 shrink-0"
+            title="View source legal provision definition"
           >
             <BookOpen className="h-2.5 w-2.5" />
             <span>{part}</span>
@@ -197,300 +280,388 @@ export default function AIAssistant() {
     });
   };
 
+  const groupedSessions = {
+    Today: sessions.filter(s => s.group === "Today"),
+    Yesterday: sessions.filter(s => s.group === "Yesterday"),
+    Older: sessions.filter(s => s.group === "Older")
+  };
+
   return (
-    <div className="grid lg:grid-cols-4 gap-8 items-start font-sans select-none relative max-w-7xl mx-auto h-[calc(100vh-140px)]">
+    <div className="flex h-[calc(100vh-140px)] max-w-7xl mx-auto rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden font-sans select-none relative">
       
-      {/* 1. Left sidebar suggested prompts */}
-      <div className="lg:col-span-1 bg-white p-5 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-4 h-full flex flex-col justify-between">
-        <div className="space-y-4">
-          <h3 className="text-xs font-bold text-[#111827] uppercase tracking-wider font-mono">Suggested Inquiries</h3>
-          <div className="space-y-2.5">
-            {suggestedPrompts.map((p, idx) => (
-              <button
-                key={idx}
-                onClick={() => handleSendMessage(p)}
-                className="w-full text-left p-3 text-xs bg-[#F8FAFC] hover:bg-[#EFF6FF] border border-[#E2E8F0] hover:border-[#BFDBFE] rounded-xl text-[#374151] hover:text-[#2563EB] transition-all cursor-pointer leading-normal font-medium"
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Attachments & Export Actions */}
-        <div className="p-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl space-y-3 text-[10px]">
-          <span className="font-bold text-[#4B5563] block">SECURE CHAT OPTIONS</span>
-          
-          {/* Upload Progress & Cancel Banner */}
-          {uploading && (
-            <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
-              <div className="flex items-center justify-between text-[10px]">
-                <span className="font-bold text-blue-900 truncate max-w-[120px]">{selectedFile?.name}</span>
-                <button
-                  type="button"
-                  onClick={handleCancelUpload}
-                  className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded cursor-pointer text-[9px]"
-                >
-                  Cancel
-                </button>
-              </div>
-              <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                <div className="bg-blue-600 h-1.5 transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-2">
-            <button 
-              disabled={messages.length === 0}
-              onClick={() => {
-                if (messages.length === 0) return;
-                try {
-                  api.exportChatPDF(messages, "CrimeGPT Assistant Transcript");
-                  setToast({ type: "success", message: "Chat transcript PDF exported successfully." });
-                } catch (err) {
-                  setToast({ type: "error", message: "Export failed: " + err.message });
-                }
-              }}
-              className={`flex items-center justify-center gap-1.5 p-2 border rounded-lg font-bold transition-colors ${
-                messages.length === 0 
-                  ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed" 
-                  : "bg-white border-[#E2E8F0] hover:border-blue-300 hover:text-blue-600 text-[#4B5563] cursor-pointer"
-              }`}
-              title={messages.length === 0 ? "No chat messages to export" : "Export chat as PDF"}
-            >
-              <Upload className="h-3.5 w-3.5" />
-              <span>PDF Logs</span>
-            </button>
-            
-            <label className="flex items-center justify-center gap-1.5 p-2 bg-white border border-[#E2E8F0] hover:border-blue-300 hover:text-blue-600 rounded-lg text-[#4B5563] font-bold cursor-pointer transition-colors">
-              <Image className="h-3.5 w-3.5" />
-              <span>Images / Files</span>
-              <input
-                type="file"
-                accept=".jpg,.jpeg,.png,.pdf,.docx"
-                className="hidden"
-                disabled={uploading}
-                onChange={(e) => {
-                  if (e.target.files[0]) handleFileUpload(e.target.files[0]);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. Main Chat Panel */}
-      <div className="lg:col-span-3 bg-white rounded-2xl border border-[#E2E8F0] shadow-sm flex flex-col justify-between h-full relative overflow-hidden">
+      {/* 1. Left Sidebar: ChatGPT / Gemini Style Chat History */}
+      <div className="w-72 bg-slate-900 text-slate-100 flex flex-col justify-between border-r border-slate-800 shrink-0">
         
-        {/* Scrollable feed */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 pr-2">
-          {messages.length === 0 && !loading ? (
-            <div className="h-full flex flex-col items-center justify-center text-center space-y-4 py-20">
-              <div className="p-3 bg-[#EFF6FF] border border-[#BFDBFE] rounded-full text-[#2563EB]">
-                <Cpu className="h-6 w-6 animate-pulse" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-sm font-bold text-[#111827]">CrimeGPT Legal Core</h3>
-                <p className="text-xs text-[#6B7280] max-w-sm mx-auto leading-relaxed">
-                  Query legal guidelines or upload Crime Scene Photos, Evidence Images, Screenshots, and Documents. Answers will render with official source citations.
-                </p>
-              </div>
+        {/* Top: New Chat Button */}
+        <div className="p-4 border-b border-slate-800/80 space-y-3">
+          <button
+            onClick={handleNewChat}
+            className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer active:scale-95"
+          >
+            <Plus className="h-4 w-4" />
+            <span>+ New Chat</span>
+          </button>
+        </div>
+
+        {/* Scrollable Conversation Threads */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-5 text-xs">
+          
+          {sessions.length === 0 ? (
+            <div className="p-6 text-center text-slate-500 text-xs space-y-2">
+              <MessageSquare className="h-6 w-6 mx-auto opacity-50 text-blue-400" />
+              <p className="font-semibold text-slate-400">No Chat History</p>
+              <p className="text-[10px]">Start a new legal inquiry thread to begin logging conversations.</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            Object.entries(groupedSessions).map(([groupLabel, groupList]) => {
+              if (groupList.length === 0) return null;
+              return (
+                <div key={groupLabel} className="space-y-1.5">
+                  <span className="px-3 text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider block">
+                    {groupLabel}
+                  </span>
+                  
+                  <div className="space-y-1">
+                    {groupList.map(s => {
+                      const isActive = s.session_id === activeSessionId;
+                      const isEditing = editingSessionId === s.session_id;
+
+                      return (
+                        <div
+                          key={s.session_id}
+                          onClick={() => {
+                            if (!isEditing) loadSessionMessages(s.session_id);
+                          }}
+                          className={`group relative flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all text-xs ${
+                            isActive 
+                              ? "bg-slate-800 text-white border border-slate-700 shadow-xs" 
+                              : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
+                            <MessageSquare className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-blue-400' : 'text-slate-500'}`} />
+                            
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editTitleInput}
+                                onChange={(e) => setEditTitleInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") handleRenameSession(s.session_id);
+                                  if (e.key === "Escape") setEditingSessionId(null);
+                                }}
+                                autoFocus
+                                className="bg-slate-900 border border-blue-500 text-white px-2 py-0.5 rounded text-xs w-full focus:outline-none"
+                              />
+                            ) : (
+                              <span className="truncate font-medium leading-tight">
+                                {s.title}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                            {isEditing ? (
+                              <button
+                                onClick={() => handleRenameSession(s.session_id)}
+                                className="p-1 text-emerald-400 hover:text-white"
+                                title="Save Title"
+                              >
+                                <Check className="h-3 w-3" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingSessionId(s.session_id);
+                                  setEditTitleInput(s.title);
+                                }}
+                                className="p-1 text-slate-400 hover:text-white"
+                                title="Rename Chat"
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </button>
+                            )}
+
+                            <button
+                              onClick={(e) => handleDeleteSession(e, s.session_id)}
+                              className="p-1 text-slate-400 hover:text-rose-400"
+                              title="Delete Chat"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })
+          )}
+
+        </div>
+
+        {/* Sidebar Footer */}
+        <div className="p-3.5 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between text-[11px] text-slate-400">
+          <div className="flex items-center gap-2 truncate">
+            <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <span className="font-bold truncate">Police Legal Core v1.0</span>
+          </div>
+          <span className="font-mono text-[9px] text-slate-500">PROD</span>
+        </div>
+
+      </div>
+
+      {/* 2. Main Chat Canvas */}
+      <div className="flex-1 flex flex-col justify-between h-full bg-white relative overflow-hidden">
+        
+        {/* Header Bar */}
+        <div className="px-6 py-3.5 border-b border-slate-200 bg-white flex items-center justify-between z-10">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-blue-600" />
+            <h2 className="text-xs font-bold text-slate-900 font-mono uppercase tracking-wide">
+              {activeSessionId 
+                ? (sessions.find(s => s.session_id === activeSessionId)?.title || "Active Legal Consultation Thread") 
+                : "New Investigation Thread"}
+            </h2>
+          </div>
+
+          {messages.length > 0 && (
+            <button
+              onClick={() => {
+                try {
+                  api.exportChatPDF(messages, "CrimeGPT Assistant Transcript");
+                  setToast({ type: "success", message: "PDF Log generated successfully." });
+                } catch (err) {
+                  setToast({ type: "error", message: "PDF export failed: " + err.message });
+                }
+              }}
+              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 font-bold text-[11px] flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <FileText className="h-3.5 w-3.5 text-blue-600" />
+              <span>Export PDF Log</span>
+            </button>
+          )}
+        </div>
+
+        {/* Message Stream */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          
+          {/* CONDITION 1: Brand New Empty Chat (0 Messages) -> Show Suggestions Grid */}
+          {messages.length === 0 && !loading ? (
+            <div className="max-w-3xl mx-auto h-full flex flex-col items-center justify-center space-y-8 py-10">
+              
+              <div className="text-center space-y-2">
+                <div className="h-12 w-12 rounded-2xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center mx-auto shadow-xs">
+                  <Cpu className="h-6 w-6" />
+                </div>
+                <h1 className="text-xl font-bold tracking-tight text-slate-900">CrimeGPT Legal Assistant</h1>
+                <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                  Ask criminal code questions or select a suggested legal query below. Suggested prompt cards will automatically hide once you start typing.
+                </p>
+              </div>
+
+              {/* 4-6 Suggested Question Cards Grid */}
+              <div className="grid md:grid-cols-2 gap-3 w-full">
+                {suggestedPrompts.map((card, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleSendMessage(card.prompt)}
+                    className="p-4 rounded-2xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 text-left transition-all cursor-pointer group space-y-1.5 shadow-xs"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 group-hover:text-blue-700">
+                        {card.title}
+                      </span>
+                      <ChevronRight className="h-3.5 w-3.5 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-snug line-clamp-2">
+                      {card.desc}
+                    </p>
+                  </button>
+                ))}
+              </div>
+
+            </div>
+          ) : (
+            
+            /* CONDITION 2: Active Conversation (> 0 Messages) -> Suggestions Hidden */
+            <div className="max-w-3xl mx-auto space-y-5">
               {messages.map((msg, idx) => (
                 <div 
-                  key={idx} 
-                  className={`flex flex-col max-w-[85%] ${
-                    msg.role === "user" ? "ml-auto items-end" : "mr-auto items-start"
+                  key={idx}
+                  className={`flex flex-col ${
+                    msg.role === "user" ? "items-end ml-auto max-w-[85%]" : "items-start mr-auto max-w-[90%]"
                   }`}
                 >
-                  <div className={`p-4 rounded-2xl text-xs leading-relaxed ${
-                    msg.role === "user" 
-                      ? "bg-[#2563EB] text-white rounded-tr-none" 
-                      : "bg-white border border-[#E2E8F0] text-[#374151] rounded-tl-none shadow-sm"
+                  <div className={`p-4 rounded-2xl text-xs leading-relaxed shadow-xs ${
+                    msg.role === "user"
+                      ? "bg-blue-600 text-white rounded-tr-none"
+                      : "bg-white border border-slate-200 text-slate-800 rounded-tl-none"
                   }`}>
-                    {msg.attachment && (
-                      <div className="mb-2 p-2 bg-white/10 border border-white/20 rounded-lg space-y-1">
-                        <span className="font-bold flex items-center gap-1 text-[11px]">
-                          📁 Attachment: {msg.attachment.filename}
-                        </span>
-                        <span className="text-[9px] block opacity-90">{msg.attachment.file_type} • {msg.attachment.size_kb} KB • {msg.attachment.status}</span>
-                      </div>
-                    )}
-                    {msg.role === "user" ? msg.content : parseMessageCitations(msg.content, msg.citations)}
+                    {msg.role === "user" 
+                      ? msg.content 
+                      : parseMessageCitations(msg.content, msg.citations)}
                   </div>
-                  
-                  {/* Action items for AI messages */}
-                  <div className="flex items-center gap-3 mt-1 text-[8px] font-mono text-[#6B7280] uppercase">
-                    <span>{msg.role === "user" ? "Officer Client" : "AI Assistant"}</span>
+
+                  {/* Message Metadata & Copy Button */}
+                  <div className="flex items-center gap-3 mt-1.5 text-[9px] font-mono text-slate-400 uppercase">
+                    <span>{msg.role === "user" ? "Officer Inquiry" : "CrimeGPT Assistant"}</span>
                     {msg.role === "assistant" && (
                       <>
                         <span>•</span>
-                        <button 
+                        <button
                           onClick={() => handleCopy(msg.content, idx)}
-                          className="hover:underline hover:text-[#2563EB] flex items-center gap-0.5 cursor-pointer"
+                          className="hover:underline hover:text-blue-600 flex items-center gap-1 cursor-pointer"
                         >
-                          <Copy className="h-2.5 w-2.5" />
+                          <Copy className="h-3 w-3" />
                           <span>{copiedIndex === idx ? "Copied" : "Copy"}</span>
-                        </button>
-                        <span>•</span>
-                        <button 
-                          onClick={() => handleSendMessage(messages[idx-1]?.content)}
-                          className="hover:underline hover:text-[#2563EB] flex items-center gap-0.5 cursor-pointer"
-                        >
-                          <Repeat className="h-2.5 w-2.5" />
-                          <span>Regenerate</span>
                         </button>
                       </>
                     )}
                   </div>
                 </div>
               ))}
+
+              {/* Typing Loading Indicator */}
+              {loading && (
+                <div className="flex items-center gap-2 p-4 bg-slate-50 border border-slate-200 rounded-2xl rounded-tl-none w-fit max-w-[200px]">
+                  <div className="h-2 w-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <div className="h-2 w-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <div className="h-2 w-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: "300ms" }} />
+                  <span className="text-[10px] font-mono text-slate-500 font-semibold ml-1">Analyzing Law...</span>
+                </div>
+              )}
+
+              <div ref={chatBottomRef} />
             </div>
+
           )}
-          {loading && (
-            <div className="flex items-center gap-2 mr-auto bg-[#F8FAFC] border border-[#E2E8F0] p-3 rounded-xl">
-              <RefreshCw className="h-3.5 w-3.5 text-[#2563EB] animate-spin" />
-              <span className="text-[10px] font-mono text-[#6B7280] uppercase tracking-wider font-semibold">Generating reformed citations...</span>
-            </div>
-          )}
-          <div ref={chatBottomRef} />
+
         </div>
 
-        {/* Chat input box */}
-        <form 
-          onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} 
-          className="p-4 border-t border-[#E2E8F0] flex gap-3 shrink-0"
-        >
-          <input
-            type="text"
-            placeholder="Type legal questions (e.g. 'What are the rules of digital custody?')..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            className="flex-1 saas-input px-4 py-3 text-xs"
-          />
-          <div className="flex gap-2">
-            <label className="p-3 bg-[#F8FAFC] border border-[#E2E8F0] text-[#6B7280] hover:text-[#111827] rounded-xl cursor-pointer flex items-center justify-center" title="Upload Image / Photo / Document">
-              <Image className="h-4 w-4" />
-              <input
-                type="file"
-                accept=".jpg,.jpeg,.png,.pdf,.docx"
-                className="hidden"
-                onChange={async (e) => {
-                  const file = e.target.files[0];
-                  if (!file) return;
-                  try {
-                    setLoading(true);
-                    const res = await api.uploadChatAttachment(file);
-                    const attachmentMsg = {
-                      role: "user",
-                      content: `[Uploaded Evidence ${res.file_type}: ${res.filename} (${res.size_kb} KB)]`,
-                      attachment: res,
-                      timestamp: new Date(),
-                      citations: []
-                    };
-                    setMessages(prev => [...prev, attachmentMsg]);
-                    const aiRes = await api.generalChat(`Analyze uploaded ${res.file_type} evidence file '${res.filename}'. Provide guidance on chain of custody.`);
-                    setMessages(prev => [...prev, {
-                      role: "assistant",
-                      content: aiRes.response,
-                      timestamp: new Date(),
-                      citations: aiRes.citations || []
-                    }]);
-                  } catch (err) {
-                    alert("Upload failed: " + err.message);
-                  } finally {
-                    setLoading(false);
-                    e.target.value = "";
-                  }
-                }}
-              />
-            </label>
-            <button
-              type="submit"
-              className="px-5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl cursor-pointer hover:shadow-lg transition-all flex items-center justify-center font-bold"
-            >
-              <Send className="h-4 w-4" />
-            </button>
-          </div>
-        </form>
+        {/* 3. Input Bar at Bottom (Inline File Attachment Icon inside Input Bar) */}
+        <div className="p-4 bg-white border-t border-slate-200">
+          
+          <div className="max-w-3xl mx-auto space-y-2">
+            
+            {/* Upload Banner with Cancel Button */}
+            {uploading && (
+              <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2 truncate">
+                  <Paperclip className="h-4 w-4 text-blue-600 animate-pulse shrink-0" />
+                  <span className="font-bold text-blue-900 truncate">{selectedFile?.name}</span>
+                  <span className="text-[10px] text-blue-700 font-mono">({uploadProgress}%)</span>
+                </div>
+                <button
+                  onClick={handleCancelUpload}
+                  className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-[10px] cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
 
+            {/* Input Form with Attachment Paperclip Inside */}
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!loading) handleSendMessage();
+              }}
+              className="relative flex items-center rounded-2xl border border-slate-300 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 bg-white shadow-xs transition-all"
+            >
+              
+              {/* Attachment Icon Inside Input Bar (Left) */}
+              <label 
+                className="pl-3.5 pr-1.5 py-3 text-slate-400 hover:text-blue-600 transition-colors cursor-pointer shrink-0"
+                title="Attach evidence photo/document (Max 20MB)"
+              >
+                <Paperclip className="h-4 w-4" />
+                <input
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.pdf,.docx"
+                  className="hidden"
+                  disabled={uploading || loading}
+                  onChange={(e) => {
+                    if (e.target.files[0]) handleFileUpload(e.target.files[0]);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+
+              {/* Text Input */}
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask legal provisions (BNS, BNSS, BSA) or cyber investigation procedures..."
+                disabled={loading}
+                className="w-full py-3 pr-12 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none bg-transparent"
+              />
+
+              {/* Send Button Inside Input Bar (Right) */}
+              <button
+                type="submit"
+                disabled={!input.trim() || loading}
+                className={`absolute right-2 p-2 rounded-xl text-white transition-all ${
+                  input.trim() && !loading
+                    ? "bg-blue-600 hover:bg-blue-500 cursor-pointer shadow-xs"
+                    : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                }`}
+              >
+                <Send className="h-3.5 w-3.5" />
+              </button>
+
+            </form>
+
+            <p className="text-[10px] text-center text-slate-400 font-mono">
+              CrimeGPT synthesizes official criminal code provisions (BNS, BNSS, BSA). Officers must verify citations prior to judicial filing.
+            </p>
+
+          </div>
+
+        </div>
 
       </div>
 
-      {/* Slide-out Citation Details Drawer */}
+      {/* Citation Slide-out Details Drawer */}
       {activeCitation && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end">
-          <div 
-            className="w-full max-w-md bg-white border-l border-[#E2E8F0] h-full p-6 shadow-2xl flex flex-col justify-between overflow-y-auto space-y-6 animate-slide-in relative text-xs"
-          >
-            <button 
-              onClick={() => setActiveCitation(null)}
-              className="absolute top-4 right-4 text-[#9CA3AF] hover:text-[#111827] p-2 rounded-xl hover:bg-[#F8FAFC]"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <div className="space-y-6">
-              <div className="space-y-1 pb-4 border-b border-[#F1F5F9]">
-                <span className="text-[9px] font-mono text-[#2563EB] font-black tracking-widest uppercase">LEGAL CITATION SOURCE</span>
-                <h3 className="text-base font-bold text-[#111827]">{activeCitation.section_reference}</h3>
-                <span className="text-[11px] text-[#6B7280] font-semibold">{activeCitation.act} • {activeCitation.title}</span>
+        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs z-50 flex justify-end animate-fade-in">
+          <div className="w-full max-w-md bg-white h-full p-6 space-y-6 overflow-y-auto shadow-2xl border-l border-slate-200 flex flex-col justify-between">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+                <div className="flex items-center gap-2 text-blue-700">
+                  <BookOpen className="h-5 w-5" />
+                  <h3 className="font-bold text-sm text-slate-900">{activeCitation.section_reference}</h3>
+                </div>
+                <button 
+                  onClick={() => setActiveCitation(null)}
+                  className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
 
-              <div className="space-y-4 leading-relaxed text-[#374151]">
-                <div className="space-y-1">
-                  <span className="block text-[9px] text-[#6B7280] font-mono uppercase font-bold tracking-wider">Justification Summary</span>
-                  <p className="p-3 bg-[#F8FAFC] rounded-xl border border-[#E2E8F0] text-[#4B5563] italic">
-                    {activeCitation.justification}
-                  </p>
+              <div className="space-y-3 text-xs">
+                <div>
+                  <span className="text-[10px] font-mono font-bold text-slate-400 uppercase block">ACT & TITLE:</span>
+                  <span className="font-bold text-slate-900">{activeCitation.act} • {activeCitation.title}</span>
                 </div>
 
-                <div className="space-y-1">
-                  <span className="block text-[9px] text-[#6B7280] font-mono uppercase font-bold tracking-wider">Exact Source Text</span>
-                  <p className="p-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-[#111827] font-mono text-[10px] leading-relaxed select-all">
-                    {activeCitation.citation_text}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 border-t border-[#F1F5F9] pt-4 text-xs">
-                  <div>
-                    <span className="block text-[9px] text-[#6B7280] font-mono uppercase font-bold">RAG Match Confidence</span>
-                    <span className="text-sm font-bold text-[#10B981] font-mono mt-0.5 block">
-                      {activeCitation.confidence_score}% Match
-                    </span>
-                  </div>
-                  <div>
-                    <span className="block text-[9px] text-[#6B7280] font-mono uppercase font-bold">Old Law Equivalent</span>
-                    <span className="text-xs font-semibold text-[#111827] font-mono mt-0.5 block">
-                      {activeCitation.section_reference.includes("303") ? "IPC Section 378 / 379" :
-                       activeCitation.section_reference.includes("305") ? "IPC Section 380" :
-                       activeCitation.section_reference.includes("308") ? "IPC Section 384" :
-                       activeCitation.section_reference.includes("316") ? "IPC Section 405" :
-                       activeCitation.section_reference.includes("318") ? "IPC Section 420" :
-                       activeCitation.section_reference.includes("329") ? "IPC Section 441 / 448" :
-                       activeCitation.section_reference.includes("115") ? "IPC Section 323" :
-                       activeCitation.section_reference.includes("117") ? "IPC Section 325" :
-                       activeCitation.section_reference.includes("103") ? "IPC Section 302" :
-                       activeCitation.section_reference.includes("351") ? "IPC Section 506" :
-                       activeCitation.section_reference.includes("173") ? "CrPC Section 154" :
-                       activeCitation.section_reference.includes("63") ? "IEA Section 65B" : "N/A Mapping"}
-                    </span>
-                  </div>
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                  <span className="text-[10px] font-mono font-bold text-slate-500 uppercase block">STATUTORY TEXT:</span>
+                  <p className="text-slate-700 leading-relaxed font-medium">{activeCitation.citation_text}</p>
                 </div>
               </div>
             </div>
 
             <button
               onClick={() => setActiveCitation(null)}
-              className="w-full py-2.5 bg-[#F8FAFC] hover:bg-[#F1F5F9] border border-[#E2E8F0] text-[#374151] rounded-xl text-xs font-semibold"
+              className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold cursor-pointer transition-colors"
             >
               Dismiss Source Panel
             </button>
-
           </div>
         </div>
       )}

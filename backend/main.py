@@ -18,7 +18,7 @@ from backend.config import GEMINI_API_KEY
 from backend.database import (
     engine, Base, get_db, User, Case, Log, 
     FIRDraft, LegalSectionCited, EvidenceItem, ChatMessage,
-    Notification, PasswordHistory
+    Notification, PasswordHistory, ChatSession
 )
 from backend.auth import (
     get_password_hash, verify_password, create_access_token, create_refresh_token,
@@ -311,7 +311,14 @@ class SOPChatRequest(BaseModel):
 
 class GeneralChatRequest(BaseModel):
     message: str
+    session_id: Optional[str] = None
     custom_key: Optional[str] = None
+
+class CreateSessionRequest(BaseModel):
+    title: Optional[str] = "New Legal Consultation"
+
+class RenameSessionRequest(BaseModel):
+    title: str
 
 class KeyValidateRequest(BaseModel):
     api_key: str
@@ -1093,6 +1100,122 @@ def get_case_sop_chat(
         db.rollback()
         return {"response": f"AI Error: {e}. Fallback checklist:\n{offline_response}", "citations": []}
 
+# --- CHAT SESSION MANAGEMENT ENDPOINTS ---
+
+@app.get("/api/chat/sessions")
+def get_chat_sessions(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    sessions = db.query(ChatSession).filter(ChatSession.user_id == current_user.id).order_by(ChatSession.updated_at.desc()).all()
+    
+    now = datetime.utcnow()
+    today_start = datetime(now.year, now.month, now.day)
+    yesterday_start = today_start - timedelta(days=1)
+    
+    result = []
+    for s in sessions:
+        updated_dt = s.updated_at or s.created_at
+        if updated_dt >= today_start:
+            group = "Today"
+        elif updated_dt >= yesterday_start:
+            group = "Yesterday"
+        else:
+            group = "Older"
+            
+        result.append({
+            "id": s.id,
+            "session_id": s.session_id,
+            "title": s.title,
+            "group": group,
+            "created_at": s.created_at.isoformat() if hasattr(s.created_at, 'isoformat') else str(s.created_at),
+            "updated_at": s.updated_at.isoformat() if hasattr(s.updated_at, 'isoformat') else str(s.updated_at)
+        })
+        
+    return result
+
+@app.post("/api/chat/sessions")
+def create_chat_session(
+    request: CreateSessionRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    session_id = f"session_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{random.randint(1000, 9999)}"
+    session = ChatSession(
+        session_id=session_id,
+        user_id=current_user.id,
+        title=request.title or "New Legal Consultation"
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return {
+        "id": session.id,
+        "session_id": session.session_id,
+        "title": session.title,
+        "group": "Today",
+        "created_at": session.created_at.isoformat(),
+        "updated_at": session.updated_at.isoformat()
+    }
+
+@app.put("/api/chat/sessions/{session_id}")
+def rename_chat_session(
+    session_id: str,
+    request: RenameSessionRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    session = db.query(ChatSession).filter(ChatSession.session_id == session_id, ChatSession.user_id == current_user.id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+        
+    session.title = request.title
+    session.updated_at = datetime.utcnow()
+    db.commit()
+    return {"session_id": session.session_id, "title": session.title, "message": "Session renamed successfully"}
+
+@app.delete("/api/chat/sessions/{session_id}")
+def delete_chat_session(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    session = db.query(ChatSession).filter(ChatSession.session_id == session_id, ChatSession.user_id == current_user.id).first()
+    if session:
+        db.query(ChatMessage).filter(ChatMessage.session_id == session_id).delete()
+        db.delete(session)
+        db.commit()
+    return {"message": "Chat session deleted successfully"}
+
+@app.get("/api/chat/sessions/{session_id}/messages")
+def get_session_messages(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    messages = db.query(ChatMessage).filter(
+        ChatMessage.session_id == session_id,
+        ChatMessage.user_id == current_user.id
+    ).order_by(ChatMessage.timestamp.asc()).all()
+    
+    serialized = []
+    for m in messages:
+        cites = []
+        if m.citations:
+            try:
+                cites = json.loads(m.citations)
+            except:
+                pass
+        serialized.append({
+            "id": m.id,
+            "session_id": m.session_id,
+            "role": m.role,
+            "content": m.content,
+            "timestamp": m.timestamp.isoformat() if hasattr(m.timestamp, 'isoformat') else str(m.timestamp),
+            "citations": cites
+        })
+    return serialized
+
 @app.post("/api/assistant/chat")
 def general_ai_chat(
     request: GeneralChatRequest,
@@ -1100,6 +1223,36 @@ def general_ai_chat(
     db: Session = Depends(get_db)
 ):
     api_key = request.custom_key or GEMINI_API_KEY
+    
+    # Handle ChatSession association
+    active_session = None
+    if request.session_id:
+        active_session = db.query(ChatSession).filter(
+            ChatSession.session_id == request.session_id, 
+            ChatSession.user_id == current_user.id
+        ).first()
+
+    if not active_session:
+        # Create auto session with title from first message
+        session_id = f"session_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{random.randint(1000, 9999)}"
+        auto_title = request.message[:35].strip() + ("..." if len(request.message) > 35 else "")
+        active_session = ChatSession(
+            session_id=session_id,
+            user_id=current_user.id,
+            title=auto_title or "New Legal Consultation"
+        )
+        db.add(active_session)
+        db.commit()
+        db.refresh(active_session)
+    else:
+        # If session title is default, update it with first user message
+        if active_session.title in ["New Legal Consultation", "New Chat"]:
+            auto_title = request.message[:35].strip() + ("..." if len(request.message) > 35 else "")
+            active_session.title = auto_title
+        active_session.updated_at = datetime.utcnow()
+        db.commit()
+
+    session_id = active_session.session_id
     
     # Retrieve relevant sections matching query
     matched = search_laws(request.message, api_key, top_k=3)
@@ -1117,6 +1270,7 @@ def general_ai_chat(
     user_msg = ChatMessage(
         user_id=current_user.id,
         case_id=None,
+        session_id=session_id,
         message_type="general_assistant",
         role="user",
         content=request.message
@@ -1132,6 +1286,7 @@ def general_ai_chat(
         assistant_msg = ChatMessage(
             user_id=current_user.id,
             case_id=None,
+            session_id=session_id,
             message_type="general_assistant",
             role="assistant",
             content=offline_response,
@@ -1139,7 +1294,7 @@ def general_ai_chat(
         )
         db.add(assistant_msg)
         db.commit()
-        return {"response": offline_response, "citations": citations_data}
+        return {"response": offline_response, "citations": citations_data, "session_id": session_id}
         
     try:
         prompt = f"""
@@ -1161,6 +1316,7 @@ def general_ai_chat(
         assistant_msg = ChatMessage(
             user_id=current_user.id,
             case_id=None,
+            session_id=session_id,
             message_type="general_assistant",
             role="assistant",
             content=text,
@@ -1168,9 +1324,9 @@ def general_ai_chat(
         )
         db.add(assistant_msg)
         db.commit()
-        return {"response": text, "citations": citations_data}
+        return {"response": text, "citations": citations_data, "session_id": session_id}
     except Exception as e:
-        return {"response": f"AI Error: {e}. Matching references:\n{offline_response}", "citations": citations_data}
+        return {"response": f"AI Error: {e}. Matching references:\n{offline_response}", "citations": citations_data, "session_id": session_id}
 
 @app.get("/api/chat/history")
 def get_chat_history(

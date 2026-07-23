@@ -349,13 +349,61 @@ export const api = {
     return response.json();
   },
 
+  // Chat Sessions (ChatGPT / Gemini Style Threads)
+  getChatSessions: async () => {
+    const response = await fetch(`${API_BASE_URL}/chat/sessions`, {
+      method: "GET",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to fetch chat sessions");
+    return response.json();
+  },
+
+  createChatSession: async (title = "New Legal Consultation") => {
+    const response = await fetch(`${API_BASE_URL}/chat/sessions`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ title })
+    });
+    if (!response.ok) throw new Error("Failed to create new chat session");
+    return response.json();
+  },
+
+  renameChatSession: async (sessionId, title) => {
+    const response = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}`, {
+      method: "PUT",
+      headers: getHeaders(),
+      body: JSON.stringify({ title })
+    });
+    if (!response.ok) throw new Error("Failed to rename chat session");
+    return response.json();
+  },
+
+  deleteChatSession: async (sessionId) => {
+    const response = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}`, {
+      method: "DELETE",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to delete chat session");
+    return response.json();
+  },
+
+  getSessionMessages: async (sessionId) => {
+    const response = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}/messages`, {
+      method: "GET",
+      headers: getHeaders()
+    });
+    if (!response.ok) throw new Error("Failed to fetch session messages");
+    return response.json();
+  },
+
   // General Legal Q&A Assistant Chat
-  generalChat: async (message) => {
+  generalChat: async (message, sessionId = null) => {
     const customKey = localStorage.getItem("gemini_api_key") || "";
     const response = await fetch(`${API_BASE_URL}/assistant/chat`, {
       method: "POST",
       headers: getHeaders(),
-      body: JSON.stringify({ message, custom_key: customKey })
+      body: JSON.stringify({ message, session_id: sessionId, custom_key: customKey })
     });
     if (!response.ok) {
       let errMsg = "Assistant Q&A failed";
