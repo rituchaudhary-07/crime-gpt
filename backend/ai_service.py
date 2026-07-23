@@ -10,6 +10,7 @@ class AIService:
         openrouter_key = os.getenv("OPENROUTER_API_KEY", "")
         groq_key = os.getenv("GROQ_API_KEY", "")
         openai_key = os.getenv("OPENAI_API_KEY", "")
+        gemini_key = os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
         
         # 1. OpenRouter (Keys start with 'sk-or-')
         if custom_key and custom_key.startswith("sk-or-"):
@@ -29,6 +30,12 @@ class AIService:
         elif openai_key:
             return "openai", openai_key, "gpt-4o-mini"
 
+        # 4. Gemini (Keys start with 'AIzaSy' or GEMINI_API_KEY env var)
+        if custom_key and custom_key.startswith("AIzaSy"):
+            return "gemini", custom_key, "gemini-1.5-flash"
+        elif gemini_key:
+            return "gemini", gemini_key, "gemini-1.5-flash"
+
         # If custom key does not match format, check env fallbacks first
         if openrouter_key:
             return "openrouter", openrouter_key, "deepseek/deepseek-chat-v3"
@@ -36,6 +43,8 @@ class AIService:
             return "groq", groq_key, "llama-3.3-70b-versatile"
         elif openai_key:
             return "openai", openai_key, "gpt-4o-mini"
+        elif gemini_key:
+            return "gemini", gemini_key, "gemini-1.5-flash"
             
         return "offline", "", ""
 
@@ -45,10 +54,18 @@ class AIService:
         
         if provider == "offline":
             # Rule-based fallback summary text
-            return "[Offline Fallback Mode] AI matching completed locally. Please configure a valid OpenRouter, Groq, or OpenAI API key in your environment variables."
+            return "[Offline Fallback Mode] AI matching completed locally. Please configure a valid API key."
 
         try:
-            if provider == "openrouter":
+            if provider == "gemini":
+                import google.generativeai as genai
+                genai.configure(api_key=api_key)
+                model_inst = genai.GenerativeModel("gemini-1.5-flash")
+                prompt = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in messages])
+                response = model_inst.generate_content(prompt)
+                return response.text.strip()
+
+            elif provider == "openrouter":
                 url = "https://openrouter.ai/api/v1/chat/completions"
                 headers = {
                     "Authorization": f"Bearer {api_key}",
