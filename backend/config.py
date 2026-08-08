@@ -23,7 +23,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # Browser clients allowed to call the API. Use a comma-separated list in production,
 # for example: https://crimegpt.vercel.app,https://staging.crimegpt.example
-_default_origins = "http://localhost:5173,http://127.0.0.1:5173"
+_default_origins = "http://localhost:5173,http://127.0.0.1:5173,https://crimegpt.vercel.app,*"
 CORS_ORIGINS = [
     origin.strip().rstrip("/")
     for origin in os.getenv("CORS_ORIGINS", _default_origins).split(",")

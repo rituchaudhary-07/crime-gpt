@@ -68,11 +68,41 @@ const getHeaders = (isMultipart = false) => {
 export const api = {
   apiBaseUrl: API_BASE_URL,
 
-  checkHealth: async () => requestJson(
-    API_HEALTH_URL,
-    { method: "GET", headers: { Accept: "application/json" } },
-    "Backend health check failed"
-  ),
+  checkHealth: async () => {
+    const rootUrl = API_BASE_URL.replace(/\/api$/, "");
+    const candidateUrls = [
+      `${API_BASE_URL}/health`,
+      `${rootUrl}/health`,
+      `${rootUrl}/api/health`,
+      `${rootUrl}/openapi.json`,
+      `${rootUrl}/docs`
+    ];
+
+    const probeUrls = [...new Set(candidateUrls)];
+
+    for (const probeUrl of probeUrls) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const response = await fetch(probeUrl, {
+          method: "GET",
+          headers: { Accept: "application/json, text/html" },
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+        if (response.ok) {
+          return { status: "ok", url: probeUrl };
+        }
+      } catch (e) {
+        // Probe next endpoint candidate
+      }
+    }
+
+    throw new ApiRequestError(
+      `Could not reach backend API at ${API_BASE_URL}. Confirm the backend service is running.`,
+      { code: "network_or_cors" }
+    );
+  },
   // Authentication
   login: async (username, password) => {
     const formData = new URLSearchParams();

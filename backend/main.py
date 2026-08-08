@@ -1,3 +1,13 @@
+import sys
+from pathlib import Path
+
+_file_dir = Path(__file__).resolve().parent
+_repo_dir = _file_dir.parent
+if str(_file_dir) not in sys.path:
+    sys.path.insert(0, str(_file_dir))
+if str(_repo_dir) not in sys.path:
+    sys.path.insert(0, str(_repo_dir))
+
 import os
 import json
 import re
@@ -15,7 +25,6 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from backend.ai_service import AIService
-from pathlib import Path
 
 from backend.config import GEMINI_API_KEY, CORS_ORIGINS
 from backend.database import (
@@ -80,15 +89,17 @@ async def log_requests(request: Request, call_next):
 
 
 @app.get("/health", tags=["system"])
+@app.get("/api/health", tags=["system"])
 def health_check():
     """Unauthenticated readiness probe for the frontend, hosts, and load balancers."""
     return {"status": "ok", "service": "CrimeGPT API", "version": app.version}
 
 
 @app.get("/", tags=["system"])
+@app.get("/api", tags=["system"])
 def service_root():
     """Human-friendly landing response for direct browser and host checks."""
-    return {"status": "ok", "service": "CrimeGPT API", "health": "/health", "docs": "/docs"}
+    return {"status": "ok", "service": "CrimeGPT API", "health": "/api/health", "docs": "/docs"}
 
 # Helper to log actions
 def log_audit(
