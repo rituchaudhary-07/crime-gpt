@@ -27,6 +27,12 @@ const requestJson = async (url, options, fallbackMessage) => {
     }
 
     if (!response.ok) {
+      if (response.status === 401) {
+        api.logout();
+        if (typeof window !== "undefined" && window.location.pathname !== "/login" && window.location.pathname !== "/") {
+          window.location.href = "/login?expired=1";
+        }
+      }
       throw new ApiRequestError(
         payload?.detail || `${fallbackMessage} (HTTP ${response.status})`,
         { status: response.status, code: "http_error", requestId }

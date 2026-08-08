@@ -36,6 +36,11 @@ export default function Dashboard() {
       const data = await api.getStats();
       setStats(data);
     } catch (err) {
+      if (err.status === 401 || err.message?.includes("credentials") || err.message?.includes("authenticated") || err.message?.includes("Session expired")) {
+        api.logout();
+        navigate("/login");
+        return;
+      }
       setError(err.message || "Unable to load dashboard data.");
     } finally {
       setLoading(false);
