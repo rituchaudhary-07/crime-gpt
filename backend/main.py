@@ -84,6 +84,12 @@ def health_check():
     """Unauthenticated readiness probe for the frontend, hosts, and load balancers."""
     return {"status": "ok", "service": "CrimeGPT API", "version": app.version}
 
+
+@app.get("/", tags=["system"])
+def service_root():
+    """Human-friendly landing response for direct browser and host checks."""
+    return {"status": "ok", "service": "CrimeGPT API", "health": "/health", "docs": "/docs"}
+
 # Helper to log actions
 def log_audit(
     db: Session, 
