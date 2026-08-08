@@ -9,6 +9,7 @@ import { api } from "../utils/api";
 import PasswordStrengthMeter from "../components/PasswordStrengthMeter";
 import LocationAutocomplete from "../components/LocationAutocomplete";
 import AdminContactModal from "../components/AdminContactModal";
+import heroIllustration from "../assets/hero.png";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -196,24 +197,26 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 bg-saas-grid flex flex-col items-center justify-center p-4 font-sans select-none relative">
+    <div className="min-h-screen bg-[#f8fafc] font-sans text-slate-900 lg:grid lg:grid-cols-2">
+      <section className="flex min-h-screen items-center justify-center overflow-y-auto px-4 py-8 sm:px-8 lg:px-12">
+        <div className="w-full max-w-lg">
       
       {/* Top Banner Header */}
-      <div className="w-full max-w-xl mb-6 text-center space-y-2">
-        <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/30 rounded-full text-amber-400 text-xs font-mono font-bold tracking-wider uppercase">
+      <div className="mb-7 space-y-2 text-center sm:text-left">
+        <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-blue-700">
           <Shield className="h-3.5 w-3.5" />
           <span>Government Law Enforcement Portal</span>
         </div>
-        <h1 className="text-2xl font-extrabold text-white tracking-tight">
+        <h1 className="text-3xl font-extrabold tracking-tight text-slate-950">
           Crime<span className="text-blue-500">GPT</span> Police Terminal
         </h1>
-        <p className="text-xs text-slate-400 font-medium">
+        <p className="text-sm font-medium text-slate-500">
           Digital Legal Intelligence & Crime Investigation System • Directorate of Cyber Crime
         </p>
       </div>
 
       {/* Main Authentication Card */}
-      <div className="w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_45px_rgba(15,23,42,.08)]">
         
         {/* Navigation Tabs Header */}
         <div className="flex border-b border-slate-200 bg-slate-50 p-1.5 gap-1.5">
@@ -766,6 +769,23 @@ export default function Login() {
         </div>
 
       </div>
+        <p className="mt-5 text-center text-xs text-slate-400">Protected access for authorized law-enforcement personnel.</p>
+        </div>
+      </section>
+
+      <aside className="relative hidden overflow-hidden bg-slate-950 p-12 lg:flex lg:flex-col lg:justify-between">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(37,99,235,.42),transparent_30%),radial-gradient(circle_at_82%_86%,rgba(6,182,212,.2),transparent_28%)]" />
+        <div className="absolute inset-0 bg-saas-grid opacity-20" />
+        <div className="relative z-10 flex items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-blue-200"><Shield className="h-4 w-4" />Law-enforcement intelligence</div>
+        <div className="relative z-10 max-w-md">
+          <div className="mb-8 flex h-64 items-center justify-center rounded-[2rem] border border-white/10 bg-white/[.04] backdrop-blur-sm">
+            <img src={heroIllustration} alt="CrimeGPT intelligence platform" className="h-52 w-auto drop-shadow-[0_20px_30px_rgba(0,0,0,.35)]" />
+          </div>
+          <h2 className="text-4xl font-bold leading-tight tracking-tight text-white">Intelligence that keeps every case moving.</h2>
+          <p className="mt-5 max-w-sm text-base leading-relaxed text-slate-300">A protected workspace for case records, legal research, evidence, and compliant reporting.</p>
+        </div>
+        <blockquote className="relative z-10 max-w-md border-l-2 border-blue-400 pl-4 text-sm leading-relaxed text-slate-300">“Designed for accountable investigations and faster, better-informed decisions.”</blockquote>
+      </aside>
 
       {/* Reusable Admin Contact Modal */}
       <AdminContactModal
@@ -776,4 +796,3 @@ export default function Login() {
     </div>
   );
 }
-
