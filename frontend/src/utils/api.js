@@ -444,12 +444,50 @@ export const api = {
 
   // Conversations API (ChatGPT / Gemini Threads)
   getConversations: async () => {
-    const response = await fetch(`${API_BASE_URL}/conversations`, {
-      method: "GET",
-      headers: getHeaders()
-    });
-    if (!response.ok) throw new Error("Failed to fetch conversations");
-    return response.json();
+    try {
+      const response = await fetch(`${API_BASE_URL}/conversations`, {
+        method: "GET",
+        headers: getHeaders()
+      });
+      if (response.ok) return await response.json();
+    } catch (e) {}
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/chat/sessions`, {
+        method: "GET",
+        headers: getHeaders()
+      });
+      if (response.ok) return await response.json();
+    } catch (e) {}
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/chat/history?message_type=general_assistant`, {
+        method: "GET",
+        headers: getHeaders()
+      });
+      if (response.ok) {
+        const historyMsgs = await response.json();
+        const sessionMap = {};
+        for (const m of historyMsgs) {
+          const sid = m.session_id || "default_session";
+          if (!sessionMap[sid]) {
+            sessionMap[sid] = {
+              _id: sid,
+              id: sid,
+              session_id: sid,
+              title: m.content ? m.content.slice(0, 35) + "..." : "Legal Inquiry",
+              group: "Today",
+              lastMessagePreview: m.content ? m.content.slice(0, 60) : "",
+              createdAt: m.timestamp || new Date().toISOString(),
+              updatedAt: m.timestamp || new Date().toISOString()
+            };
+          }
+        }
+        return Object.values(sessionMap);
+      }
+    } catch (e) {}
+
+    return [];
   },
 
   createConversation: async (title = "New Legal Consultation") => {
@@ -503,12 +541,7 @@ export const api = {
 
   // Legacy Chat Sessions Aliases
   getChatSessions: async () => {
-    const response = await fetch(`${API_BASE_URL}/conversations`, {
-      method: "GET",
-      headers: getHeaders()
-    });
-    if (!response.ok) throw new Error("Failed to fetch chat sessions");
-    return response.json();
+    return api.getConversations();
   },
 
   createChatSession: async (title = "New Legal Consultation") => {
@@ -541,13 +574,37 @@ export const api = {
   },
 
   getSessionMessages: async (sessionId) => {
-    const res = await fetch(`${API_BASE_URL}/conversations/${sessionId}`, {
-      method: "GET",
-      headers: getHeaders()
-    });
-    if (!res.ok) throw new Error("Failed to fetch session messages");
-    const data = await res.json();
-    return data.messages || [];
+    try {
+      const res = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}/messages`, {
+        method: "GET",
+        headers: getHeaders()
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/conversations/${sessionId}`, {
+        method: "GET",
+        headers: getHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.messages || data || [];
+      }
+    } catch (e) {}
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/chat/history?message_type=general_assistant`, {
+        method: "GET",
+        headers: getHeaders()
+      });
+      if (res.ok) {
+        const allMsgs = await res.json();
+        return allMsgs.filter(m => m.session_id === sessionId || !sessionId);
+      }
+    } catch (e) {}
+
+    return [];
   },
 
   getArchivedCases: async () => {
