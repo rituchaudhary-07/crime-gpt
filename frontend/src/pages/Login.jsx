@@ -11,8 +11,11 @@ import LocationAutocomplete from "../components/LocationAutocomplete";
 import AdminContactModal from "../components/AdminContactModal";
 import heroIllustration from "../assets/hero.png";
 
+import { AuthUI } from "@/components/ui/auth-ui";
+
 export default function Login() {
   const navigate = useNavigate();
+  const [useAuthUI, setUseAuthUI] = useState(false);
   const [activeTab, setActiveTab] = useState("login"); // "login", "register", "forgot"
   
   // Login Form State
@@ -196,6 +199,43 @@ export default function Login() {
     }
   };
 
+  if (useAuthUI) {
+    return (
+      <div className="relative">
+        <button
+          onClick={() => setUseAuthUI(false)}
+          className="fixed top-4 left-4 z-50 rounded-full border border-slate-300 bg-white/90 px-4 py-2 text-xs font-bold text-slate-800 shadow-md backdrop-blur-sm transition-all hover:bg-slate-100 cursor-pointer"
+        >
+          ← Switch to Standard Police Terminal Form
+        </button>
+        <AuthUI
+          signInContent={{
+            image: {
+              src: "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=1200&q=80",
+              alt: "Law enforcement legal intelligence platform"
+            },
+            quote: {
+              text: "CrimeGPT Intelligence System • Directorate of Cyber Crime",
+              author: "Police HQ Command Kernel"
+            }
+          }}
+          signUpContent={{
+            image: {
+              src: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1200&q=80",
+              alt: "Cyber police network intelligence workspace"
+            },
+            quote: {
+              text: "Digital Legal Intelligence & Crime Investigation System",
+              author: "Directorate of Cyber Crime"
+            }
+          }}
+          onSignInSubmit={handleLoginSubmit}
+          onSignUpSubmit={handleRegisterSubmit}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans text-slate-900 lg:grid lg:grid-cols-2">
       <section className="flex min-h-screen items-center justify-center overflow-y-auto px-4 py-8 sm:px-8 lg:px-12">
@@ -203,9 +243,18 @@ export default function Login() {
       
       {/* Top Banner Header */}
       <div className="mb-7 space-y-2 text-center sm:text-left">
-        <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-blue-700">
-          <Shield className="h-3.5 w-3.5" />
-          <span>Government Law Enforcement Portal</span>
+        <div className="flex items-center justify-between">
+          <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-blue-700">
+            <Shield className="h-3.5 w-3.5" />
+            <span>Government Law Enforcement Portal</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setUseAuthUI(true)}
+            className="rounded-full border border-purple-200 bg-purple-50 px-3 py-1 text-xs font-bold text-purple-700 hover:bg-purple-100 transition-colors cursor-pointer"
+          >
+            ✨ Modern AuthUI View
+          </button>
         </div>
         <h1 className="text-3xl font-extrabold tracking-tight text-slate-950">
           Crime<span className="text-blue-500">GPT</span> Police Terminal
