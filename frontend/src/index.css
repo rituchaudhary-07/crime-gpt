@@ -4,6 +4,24 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --cg-ink: #0f172a;
+  --cg-muted: #64748b;
+  --cg-canvas: #f7f9fc;
+  --cg-surface: #ffffff;
+  --cg-line: #e2e8f0;
+  --cg-primary: #2563eb;
+  --cg-primary-soft: #eff6ff;
+  --cg-success: #059669;
+  --cg-warning: #d97706;
+  --cg-danger: #dc2626;
+  --cg-radius-sm: 10px;
+  --cg-radius: 16px;
+  --cg-radius-lg: 20px;
+  --cg-shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 10px 24px rgba(15, 23, 42, .04);
+  --cg-shadow-raised: 0 8px 26px rgba(15, 23, 42, .10);
+}
+
 @layer base {
   body {
     background-color: #F8FAFC;
@@ -53,6 +71,28 @@
   transform: translateY(-1.5px);
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02), 0 12px 24px -4px rgba(0, 0, 0, 0.04), 0 4px 12px -2px rgba(0, 0, 0, 0.02);
   border-color: #CBD5E1;
+}
+
+.dashboard-skeleton {
+  overflow: hidden;
+  background: linear-gradient(90deg, #f1f5f9 20%, #f8fafc 50%, #f1f5f9 80%);
+  background-size: 200% 100%;
+  animation: cg-shimmer 1.35s linear infinite;
+}
+
+@keyframes cg-shimmer {
+  to { background-position: -200% 0; }
+}
+
+.dashboard-metric {
+  box-shadow: var(--cg-shadow);
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+
+.dashboard-metric:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--cg-shadow-raised);
+  border-color: #cbd5e1;
 }
 
 /* Premium Form Inputs */

@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, Link, useLocation, useNavigate 
 import { 
   LayoutDashboard, FilePlus, Briefcase, MessageSquareCode, 
   FileText, Search, ClipboardList, BarChart3, History, 
-  Settings, LogOut, User, Bell, Calendar, SearchCheck, Globe
+  Settings, LogOut, User, Bell, Calendar, SearchCheck, Globe, Menu
 } from "lucide-react";
 import { api } from "./utils/api";
 
@@ -33,6 +33,7 @@ function Layout({ children }) {
   // Notification State
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showMobileNav, setShowMobileNav] = useState(false);
 
   // Global Search State
   const [globalQuery, setGlobalQuery] = useState("");
@@ -47,6 +48,8 @@ function Layout({ children }) {
       loadNotifications();
     }
   }, [isAuthenticated, location.pathname]);
+
+  useEffect(() => { setShowMobileNav(false); }, [location.pathname]);
 
   // Session Inactivity Timeout (15 minutes = 900,000 ms)
   useEffect(() => {
@@ -134,7 +137,8 @@ function Layout({ children }) {
     <div className="flex min-h-screen bg-[#F8FAFC] font-sans">
       
       {/* Sidebar Panel */}
-      <aside className="w-64 bg-white border-r border-[#E2E8F0] flex flex-col justify-between fixed h-screen z-20">
+      {showMobileNav && <button aria-label="Close navigation" onClick={() => setShowMobileNav(false)} className="fixed inset-0 z-20 bg-slate-950/30 lg:hidden" />}
+      <aside className={`fixed z-30 flex h-screen w-64 flex-col justify-between border-r border-[#E2E8F0] bg-white transition-transform duration-200 lg:translate-x-0 ${showMobileNav ? "translate-x-0 shadow-2xl" : "-translate-x-full"}`}>
         <div className="flex flex-col">
           {/* Logo Brand Header */}
           <div className="h-16 flex items-center px-6 border-b border-[#F1F5F9] gap-3 cursor-pointer" onClick={() => navigate("/dashboard")}>
@@ -201,13 +205,15 @@ function Layout({ children }) {
       </aside>
 
       {/* Main Right Content Panel */}
-      <div className="flex-1 pl-64 flex flex-col min-h-screen">
+      <div className="flex min-h-screen flex-1 flex-col lg:pl-64">
         
         {/* Top Header */}
-        <header className="h-16 bg-white border-b border-[#E2E8F0] px-8 flex items-center justify-between sticky top-0 z-10">
+        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-[#E2E8F0] bg-white px-4 sm:px-6 lg:px-8">
           
           {/* Header Global Search Input */}
-          <form onSubmit={handleGlobalSearch} className="relative w-80">
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowMobileNav(true)} aria-label="Open navigation" className="rounded-xl p-2 text-[#475569] transition-colors hover:bg-[#F1F5F9] lg:hidden"><Menu className="h-5 w-5" /></button>
+            <form onSubmit={handleGlobalSearch} className="relative hidden w-80 sm:block">
             <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-[#9CA3AF]">
               <Search className="h-4 w-4" />
             </span>
@@ -218,10 +224,11 @@ function Layout({ children }) {
               onChange={(e) => setGlobalQuery(e.target.value)}
               className="w-full saas-input pl-9 pr-4 py-2 text-xs"
             />
-          </form>
+            </form>
+          </div>
 
           {/* Header Actions */}
-          <div className="flex items-center gap-5">
+          <div className="flex items-center gap-2 sm:gap-5">
             {/* Calendar widget */}
             <div className="hidden sm:flex items-center gap-2 text-xs font-semibold text-[#6B7280] bg-[#F8FAFC] border border-[#E2E8F0] px-3.5 py-1.5 rounded-xl">
               <Calendar className="h-3.5 w-3.5 text-[#9CA3AF]" />
@@ -293,16 +300,16 @@ function Layout({ children }) {
             {/* Header Sign Out Action */}
             <button 
               onClick={handleLogout}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 border border-red-100 bg-red-50/40 hover:bg-red-50 text-red-600 rounded-xl text-[11px] font-bold cursor-pointer transition-colors"
+              className="flex items-center gap-1.5 rounded-xl border border-red-100 bg-red-50/40 px-2.5 py-1.5 text-[11px] font-bold text-red-600 transition-colors hover:bg-red-50 sm:px-3.5"
             >
               <LogOut className="h-3.5 w-3.5" />
-              <span>Sign Out</span>
+              <span className="hidden sm:inline">Sign Out</span>
             </button>
           </div>
         </header>
 
         {/* Content Wrapper */}
-        <main className="flex-1 p-8 bg-saas-grid">
+        <main className="flex-1 bg-saas-grid p-4 sm:p-6 lg:p-8">
           <div className="animate-slide-up">
             {children}
           </div>

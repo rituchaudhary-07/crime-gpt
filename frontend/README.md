@@ -1,3 +1,18 @@
+# CrimeGPT frontend
+
+## Local development
+
+1. From the repository root, activate the Python virtual environment and run
+   `python -m backend.run`. The API health probe will be available at
+   `http://127.0.0.1:8000/health`.
+2. In `frontend`, copy `.env.example` to `.env.local` if the API is not running
+   at the default address, then run `npm run dev`.
+
+For separate deployment, set `VITE_API_URL` in the frontend host to the public
+FastAPI URL with `/api` appended, and set the backend's `CORS_ORIGINS` to the
+exact frontend origin. Vite exposes `VITE_*` values at build time, so redeploy
+the frontend after changing it.
+
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.

@@ -21,6 +21,7 @@ backend/db/*.db
 # Secrets & Environment variables
 .env
 .env.*
+!frontend/.env.example
 backend/.env
 frontend/.env
 

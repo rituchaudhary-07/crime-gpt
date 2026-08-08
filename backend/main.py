@@ -2,6 +2,9 @@ import os
 import json
 import re
 import random
+import logging
+import time
+import uuid
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, Depends, HTTPException, status, Response, UploadFile, File, Form, Request
@@ -14,7 +17,7 @@ from pydantic import BaseModel
 from backend.ai_service import AIService
 from pathlib import Path
 
-from backend.config import GEMINI_API_KEY
+from backend.config import GEMINI_API_KEY, CORS_ORIGINS
 from backend.database import (
     engine, Base, get_db, User, Case, Log, 
     FIRDraft, LegalSectionCited, EvidenceItem, ChatMessage,
@@ -35,6 +38,7 @@ from backend.exporter import generate_pdf_report, generate_docx_report, generate
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="CrimeGPT API", version="1.0.0")
+logger = logging.getLogger("crimegpt.api")
 
 # Upload directory setup
 BASE_DIR = Path(__file__).resolve().parent
@@ -44,14 +48,41 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 # Mount Static Files for Uploads
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
-# CORS setup for React frontend
+# CORS setup for the local Vite client and explicitly configured deployments.
+# Credentials cannot be safely combined with a wildcard origin.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Attach a request id and record enough context to diagnose failed API calls."""
+    request_id = request.headers.get("x-request-id", str(uuid.uuid4()))
+    started_at = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception("request_id=%s method=%s path=%s unhandled_server_error", request_id, request.method, request.url.path)
+        raise
+
+    duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
+    response.headers["X-Request-ID"] = request_id
+    logger.info(
+        "request_id=%s method=%s path=%s status=%s duration_ms=%s",
+        request_id, request.method, request.url.path, response.status_code, duration_ms,
+    )
+    return response
+
+
+@app.get("/health", tags=["system"])
+def health_check():
+    """Unauthenticated readiness probe for the frontend, hosts, and load balancers."""
+    return {"status": "ok", "service": "CrimeGPT API", "version": app.version}
 
 # Helper to log actions
 def log_audit(
@@ -89,6 +120,7 @@ def create_notification(db: Session, user_id: int, title: str, message: str, typ
 # Seed database with default accounts if not exists
 @app.on_event("startup")
 def seed_data():
+    logger.info("CrimeGPT API starting; allowed CORS origins: %s", ", ".join(CORS_ORIGINS))
     db = next(get_db())
     try:
         # Check admin
@@ -2205,4 +2237,3 @@ def validate_gemini_key(request: KeyValidateRequest):
             raise HTTPException(status_code=400, detail="Unexpected response or key rejected by provider")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"API Key validation failed: {str(e)}")
-

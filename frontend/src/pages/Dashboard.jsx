@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { 
   FilePlus, MessageSquare, ClipboardList, Briefcase, FileText,
   Users, CheckCircle2, AlertCircle, BarChart3, Clock, 
-  ArrowRight, ShieldCheck, Cpu, Terminal, Compass, BookOpen
+  ArrowRight, ShieldCheck, Cpu, Compass, BookOpen, RefreshCw, X, WifiOff
 } from "lucide-react";
 import { api } from "../utils/api";
 
@@ -28,19 +28,21 @@ export default function Dashboard() {
   const role = api.getUserRole();
   const username = api.getUsername();
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const data = await api.getStats();
-        setStats(data);
-      } catch (err) {
-        setError("Unable to connect to the backend server. Verify uvicorn is running.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchStats();
-  }, []);
+  const fetchStats = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      await api.checkHealth();
+      const data = await api.getStats();
+      setStats(data);
+    } catch (err) {
+      setError(err.message || "Unable to load dashboard data.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchStats(); }, []);
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -58,26 +60,27 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-8 font-sans select-none">
+    <div className="space-y-8 font-sans">
       
       {/* 1. What Happened Today / Quick Starts */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-[#111827] text-lg font-bold tracking-tight">What happened today?</h2>
-            <p className="text-xs text-[#6B7280]">Review operational diagnostics and start automated trial procedures.</p>
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-[.16em] text-[#2563EB]">Operations overview</p>
+            <h2 className="text-xl font-bold tracking-tight text-[#0F172A] sm:text-2xl">Command centre</h2>
+            <p className="mt-1 text-sm text-[#64748B]">Review your caseload and continue priority investigation work.</p>
           </div>
-          <span className="text-[10px] font-bold text-[#6B7280] font-mono tracking-widest uppercase">
+          <span className="w-fit rounded-full border border-[#E2E8F0] bg-white px-3 py-1.5 text-[10px] font-bold text-[#64748B] font-mono tracking-widest uppercase shadow-sm">
             JURISDICTION STATION: {stats.recent_cases[0]?.station || "Central Cyber PS"}
           </span>
         </div>
 
         {/* Quick action grid boxes */}
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid gap-4 md:grid-cols-3">
           
           <div 
             onClick={() => navigate("/new-case")}
-            className="saas-card saas-card-hover p-6 flex flex-col justify-between h-44 cursor-pointer border-t-4 border-t-[#2563EB]"
+            className="saas-card saas-card-hover group flex h-44 cursor-pointer flex-col justify-between border-t-4 border-t-[#2563EB] p-5"
           >
             <div className="h-10 w-10 bg-[#EFF6FF] text-[#2563EB] rounded-xl flex items-center justify-center">
               <FilePlus className="h-5 w-5" />
@@ -85,7 +88,7 @@ export default function Dashboard() {
             <div>
               <h3 className="text-sm font-bold text-[#111827] flex items-center gap-1.5">
                 <span>Start New Investigation</span>
-                <ArrowRight className="h-3.5 w-3.5" />
+                <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
               </h3>
               <p className="text-xs text-[#6B7280] mt-1">Ingest facts and verify code citations under BNS 2023.</p>
             </div>
@@ -93,7 +96,7 @@ export default function Dashboard() {
 
           <div 
             onClick={() => navigate("/assistant")}
-            className="saas-card saas-card-hover p-6 flex flex-col justify-between h-44 cursor-pointer border-t-4 border-t-[#06B6D4]"
+            className="saas-card saas-card-hover group flex h-44 cursor-pointer flex-col justify-between border-t-4 border-t-[#06B6D4] p-5"
           >
             <div className="h-10 w-10 bg-[#ECFDF5] text-[#06B6D4] rounded-xl flex items-center justify-center">
               <MessageSquare className="h-5 w-5" />
@@ -101,7 +104,7 @@ export default function Dashboard() {
             <div>
               <h3 className="text-sm font-bold text-[#111827] flex items-center gap-1.5">
                 <span>Ask CrimeGPT</span>
-                <ArrowRight className="h-3.5 w-3.5" />
+                <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
               </h3>
               <p className="text-xs text-[#6B7280] mt-1">Query semantic databases for procedural compliance guidelines.</p>
             </div>
@@ -109,7 +112,7 @@ export default function Dashboard() {
 
           <div 
             onClick={() => navigate("/legal-search")}
-            className="saas-card saas-card-hover p-6 flex flex-col justify-between h-44 cursor-pointer border-t-4 border-t-[#10B981]"
+            className="saas-card saas-card-hover group flex h-44 cursor-pointer flex-col justify-between border-t-4 border-t-[#10B981] p-5"
           >
             <div className="h-10 w-10 bg-emerald-50 text-[#10B981] rounded-xl flex items-center justify-center">
               <BookOpen className="h-5 w-5" />
@@ -117,7 +120,7 @@ export default function Dashboard() {
             <div>
               <h3 className="text-sm font-bold text-[#111827] flex items-center gap-1.5">
                 <span>IPC to BNS Converter</span>
-                <ArrowRight className="h-3.5 w-3.5" />
+                <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
               </h3>
               <p className="text-xs text-[#6B7280] mt-1">Lookup legacy provision replacements and court citations.</p>
             </div>
@@ -127,9 +130,15 @@ export default function Dashboard() {
       </div>
 
       {error && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs flex items-center gap-2">
-          <AlertCircle className="h-4.5 w-4.5" />
-          <span>{error}</span>
+        <div role="alert" className="flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50/80 p-4 text-sm text-red-800 shadow-sm sm:flex-row sm:items-center">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            <div className="rounded-xl bg-red-100 p-2 text-red-600"><WifiOff className="h-4 w-4" /></div>
+            <div><p className="font-bold">Backend connection needs attention</p><p className="mt-0.5 text-xs leading-relaxed text-red-700">{error} <span className="font-mono">({api.apiBaseUrl})</span></p></div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <button onClick={fetchStats} className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-700 transition-colors hover:bg-red-100"><RefreshCw className="h-3.5 w-3.5" />Retry</button>
+            <button onClick={() => setError("")} aria-label="Dismiss connection notice" className="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-100"><X className="h-4 w-4" /></button>
+          </div>
         </div>
       )}
 
@@ -141,13 +150,13 @@ export default function Dashboard() {
           { title: "FILED REPORTS", val: stats.resolved_cases, desc: "Sealed court dossiers", icon: <CheckCircle2 className="h-4 w-4 text-[#047857]" /> },
           { title: "AVERAGE DRAFTING TIME", val: `${stats.avg_drafting_time_minutes}m`, desc: "AI optimization latency", icon: <Cpu className="h-4 w-4 text-[#7E22CE]" /> }
         ].map((m, idx) => (
-          <div key={idx} className="bg-white p-5 rounded-2xl border border-[#E2E8F0] shadow-sm flex items-center justify-between">
+          <div key={idx} className="dashboard-metric flex items-center justify-between rounded-2xl border border-[#E2E8F0] bg-white p-5">
             <div className="space-y-1">
               <span className="text-[10px] font-bold text-[#6B7280] font-mono tracking-widest uppercase">{m.title}</span>
-              <span className="text-2xl font-black text-[#111827] block">{loading ? "..." : m.val}</span>
+              {loading ? <div className="dashboard-skeleton mt-2 h-8 w-16 rounded-lg" /> : <span className="block text-2xl font-black tabular-nums text-[#111827]">{m.val}</span>}
               <span className="text-[10px] text-[#6B7280] block font-medium">{m.desc}</span>
             </div>
-            <div className="h-8 w-8 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg flex items-center justify-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#E2E8F0] bg-[#F8FAFC]">
               {m.icon}
             </div>
           </div>
@@ -171,7 +180,7 @@ export default function Dashboard() {
 
           <div className="space-y-3">
             {loading ? (
-              <div className="text-center py-10 text-xs text-[#6B7280] font-mono animate-pulse">QUERYING FILES...</div>
+              <div className="space-y-3">{[1, 2, 3].map((item) => <div key={item} className="rounded-2xl border border-[#E2E8F0] bg-white p-4"><div className="dashboard-skeleton h-3 w-2/5 rounded" /><div className="dashboard-skeleton mt-3 h-2.5 w-3/5 rounded" /></div>)}</div>
             ) : stats.recent_cases.length === 0 ? (
               <div className="bg-white p-8 rounded-2xl border border-[#E2E8F0] text-center text-xs text-[#6B7280] italic">
                 No active case logs recorded.

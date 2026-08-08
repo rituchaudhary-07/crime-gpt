@@ -1,4 +1,54 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api";
+const configuredApiUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api";
+const API_BASE_URL = configuredApiUrl.replace(/\/$/, "");
+const API_HEALTH_URL = API_BASE_URL.replace(/\/api$/, "") + "/health";
+
+export class ApiRequestError extends Error {
+  constructor(message, { status, code, requestId } = {}) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.code = code;
+    this.requestId = requestId;
+  }
+}
+
+const requestJson = async (url, options, fallbackMessage) => {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 12000);
+
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    const requestId = response.headers.get("x-request-id");
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      // A proxy/server can return a non-JSON error page; preserve the HTTP detail below.
+    }
+
+    if (!response.ok) {
+      throw new ApiRequestError(
+        payload?.detail || `${fallbackMessage} (HTTP ${response.status})`,
+        { status: response.status, code: "http_error", requestId }
+      );
+    }
+    return payload;
+  } catch (error) {
+    if (error instanceof ApiRequestError) throw error;
+    if (error.name === "AbortError") {
+      throw new ApiRequestError("The API did not respond within 12 seconds. Check the server logs or network.", { code: "timeout" });
+    }
+    if (!navigator.onLine) {
+      throw new ApiRequestError("You appear to be offline. Reconnect and retry the request.", { code: "offline" });
+    }
+    throw new ApiRequestError(
+      `Could not reach ${API_BASE_URL}. Confirm the API URL, server port, and CORS origin configuration.`,
+      { code: "network_or_cors" }
+    );
+  } finally {
+    window.clearTimeout(timeout);
+  }
+};
 
 // Helper to get auth headers
 const getHeaders = (isMultipart = false) => {
@@ -16,6 +66,13 @@ const getHeaders = (isMultipart = false) => {
 };
 
 export const api = {
+  apiBaseUrl: API_BASE_URL,
+
+  checkHealth: async () => requestJson(
+    API_HEALTH_URL,
+    { method: "GET", headers: { Accept: "application/json" } },
+    "Backend health check failed"
+  ),
   // Authentication
   login: async (username, password) => {
     const formData = new URLSearchParams();
@@ -641,12 +698,10 @@ export const api = {
   
   // Admin Endpoints
   getStats: async () => {
-    const response = await fetch(`${API_BASE_URL}/admin/stats`, {
+    return requestJson(`${API_BASE_URL}/admin/stats`, {
       method: "GET",
       headers: getHeaders()
-    });
-    if (!response.ok) throw new Error("Failed to fetch statistics");
-    return response.json();
+    }, "Unable to load dashboard statistics");
   },
   
   getLogs: async () => {
@@ -827,4 +882,3 @@ export const api = {
     return response.json();
   }
 };
-
