@@ -1,5 +1,24 @@
-const configuredApiUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api";
-const API_BASE_URL = configuredApiUrl.replace(/\/$/, "");
+const getApiBaseUrl = () => {
+  // 1. Explicitly configured VITE_API_URL environment variable takes top priority
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL.replace(/\/$/, "");
+  }
+
+  // 2. Production browser runtime fallback (non-localhost)
+  if (typeof window !== "undefined") {
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+    if (!isLocalhost) {
+      // Relative /api path in production prevents HTTPS/HTTP mixed-content & hardcoded localhost failures
+      return `${window.location.origin}/api`;
+    }
+  }
+
+  // 3. Development fallback for local FastAPI server
+  return "http://127.0.0.1:8000/api";
+};
+
+const API_BASE_URL = getApiBaseUrl();
 const API_HEALTH_URL = API_BASE_URL.replace(/\/api$/, "") + "/health";
 
 export class ApiRequestError extends Error {
