@@ -100,7 +100,23 @@ export default function AIAssistant() {
         const found = sessionList.find(s => (s.session_id === targetSessionId || s.id === targetSessionId));
         const validId = found.session_id || found.id;
         setActiveSessionId(validId);
-        loadSessionMessages(validId);
+        try {
+          await loadSessionMessages(validId);
+        } catch (e) {
+          console.warn("Failed loading target session messages:", e);
+          localStorage.removeItem("crimegpt_active_session");
+          setActiveSessionId(null);
+        }
+      } else if (sessionList.length > 0) {
+        const firstId = sessionList[0].session_id || sessionList[0].id;
+        setActiveSessionId(firstId);
+        try {
+          await loadSessionMessages(firstId);
+        } catch (e) {
+          console.warn("Failed loading first session messages:", e);
+          localStorage.removeItem("crimegpt_active_session");
+          setActiveSessionId(null);
+        }
       }
     } catch (err) {
       setHistoryError(err.message || "Unable to load chat history.");
@@ -117,11 +133,14 @@ export default function AIAssistant() {
       setActiveSessionId(sessionId);
       localStorage.setItem("crimegpt_active_session", sessionId);
     } catch (err) {
-      if (err.status === 404) {
-        setSessions(prev => prev.filter(s => (s.session_id || s.id) !== sessionId));
-        handleNewChat();
+      if (err.status === 404 || err.message?.includes("not found") || err.message?.includes("Not Found")) {
+        setSessions(prev => (Array.isArray(prev) ? prev.filter(s => (s.session_id || s.id) !== sessionId) : []));
+        localStorage.removeItem("crimegpt_active_session");
+        setActiveSessionId(null);
+        setMessages([]);
+      } else {
+        setToast({ type: "error", message: "Failed loading session messages: " + err.message });
       }
-      setToast({ type: "error", message: "Failed loading session messages: " + err.message });
     } finally {
       setLoading(false);
     }
