@@ -28,7 +28,7 @@ from backend.ai_service import AIService
 
 from backend.config import GEMINI_API_KEY, CORS_ORIGINS
 from backend.database import (
-    engine, Base, get_db, User, Case, Log, 
+    engine, Base, get_db, init_db, User, Case, Log, 
     FIRDraft, LegalSectionCited, EvidenceItem, ChatMessage,
     Notification, PasswordHistory, ChatSession
 )
@@ -43,10 +43,10 @@ from backend.rag import (
 )
 from backend.exporter import generate_pdf_report, generate_docx_report, generate_chat_pdf_report
 
-# Initialize database
-Base.metadata.create_all(bind=engine)
+# Initialize database & run missing column auto-migration
+init_db()
 
-app = FastAPI(title="CrimeGPT API", version="1.0.0")
+app = FastAPI(title="NyayaIQ API", version="1.0.0")
 logger = logging.getLogger("crimegpt.api")
 
 # Upload directory setup
@@ -92,14 +92,23 @@ async def log_requests(request: Request, call_next):
 @app.get("/api/health", tags=["system"])
 def health_check():
     """Unauthenticated readiness probe for the frontend, hosts, and load balancers."""
-    return {"status": "ok", "service": "CrimeGPT API", "version": app.version}
+    return {"status": "ok", "service": "NyayaIQ API", "version": app.version}
+
+
+def conversation_title(message: str) -> str:
+    """Create a concise, deterministic history title from the first inquiry."""
+    words = re.findall(r"[A-Za-z0-9]+", message)
+    if not words:
+        return "New Legal Consultation"
+    title = " ".join(words[:7])
+    return title[:1].upper() + title[1:]
 
 
 @app.get("/", tags=["system"])
 @app.get("/api", tags=["system"])
 def service_root():
     """Human-friendly landing response for direct browser and host checks."""
-    return {"status": "ok", "service": "CrimeGPT API", "health": "/api/health", "docs": "/docs"}
+    return {"status": "ok", "service": "NyayaIQ API", "health": "/health", "docs": "/docs"}
 
 # Helper to log actions
 def log_audit(
@@ -137,7 +146,7 @@ def create_notification(db: Session, user_id: int, title: str, message: str, typ
 # Seed database with default accounts if not exists
 @app.on_event("startup")
 def seed_data():
-    logger.info("CrimeGPT API starting; allowed CORS origins: %s", ", ".join(CORS_ORIGINS))
+    logger.info("NyayaIQ API starting; allowed CORS origins: %s", ", ".join(CORS_ORIGINS))
     db = next(get_db())
     try:
         # Check admin
@@ -362,6 +371,7 @@ class GeneralChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
     custom_key: Optional[str] = None
+    mode: Optional[str] = "legal_research"
 
 class CreateSessionRequest(BaseModel):
     title: Optional[str] = "New Legal Consultation"
@@ -663,14 +673,32 @@ def serialize_case(c: Case, db: Session) -> Dict[str, Any]:
 
 @app.get("/api/cases")
 def get_cases(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # Admin sees all, SHO sees station cases, Officer sees own OR assigned cases
+    # Admin sees all active cases, SHO sees station cases, Officer sees own OR assigned cases.
     if current_user.role == "admin":
-        cases = db.query(Case).all()
+        cases = db.query(Case).filter(~Case.status.in_(["archived", "closed"])).all()
     elif current_user.role == "sho":
-        cases = db.query(Case).filter(Case.station == current_user.station).all()
+        cases = db.query(Case).filter(Case.station == current_user.station, ~Case.status.in_(["archived", "closed"])).all()
     else:
-        cases = db.query(Case).filter((Case.created_by == current_user.id) | (Case.assigned_to == current_user.id)).all()
+        cases = db.query(Case).filter(
+            (Case.created_by == current_user.id) | (Case.assigned_to == current_user.id),
+            ~Case.status.in_(["archived", "closed"])
+        ).all()
     return [serialize_case(c, db) for c in cases]
+
+
+@app.get("/api/cases/archive")
+def list_archived_cases(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Return only archived records the authenticated user is authorized to see.
+
+    This route intentionally appears before /api/cases/{case_id}; otherwise
+    FastAPI treats the literal word 'archive' as a case id and returns 422.
+    """
+    query = db.query(Case).filter(Case.status.in_(["archived", "closed"]))
+    if current_user.role == "sho":
+        query = query.filter(Case.station == current_user.station)
+    elif current_user.role != "admin":
+        query = query.filter((Case.created_by == current_user.id) | (Case.assigned_to == current_user.id))
+    return [serialize_case(case, db) for case in query.order_by(Case.created_at.desc()).all()]
 
 @app.post("/api/cases", response_model=CaseResponse)
 def create_case(case_data: CaseCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -1125,7 +1153,7 @@ def get_case_sop_chat(
         
     try:
         prompt = f"""
-        You are CrimeGPT, a secure SOP and Investigation Guidance assistant for Indian police officers.
+        You are NyayaIQ, a secure SOP and Investigation Guidance assistant for Indian police officers.
         You are guiding an officer on the following case:
         {facts}
         
@@ -1136,7 +1164,7 @@ def get_case_sop_chat(
         Provide a practical, step-by-step guidance conforming strictly to BNSS mandates (e.g. Section 105 videography) and BSA evidence handling (e.g. Section 63 digital hash audits). Cite specific sections from BNS, BNSS, and BSA for your recommendations. Keep your answer professional and legally sound.
         """
         messages = [
-            {"role": "system", "content": "You are CrimeGPT, a secure SOP and Investigation Guidance assistant for Indian police officers."},
+            {"role": "system", "content": "You are NyayaIQ, a secure SOP and Investigation Guidance assistant for Indian police officers."},
             {"role": "user", "content": prompt}
         ]
         
@@ -1201,8 +1229,8 @@ def get_conversations(
             
         return result
     except Exception as e:
-        print("Error fetching conversations:", e)
-        return []
+        logger.exception("Unable to fetch conversations for user_id=%s", current_user.id)
+        raise HTTPException(status_code=500, detail="Unable to load conversation history") from e
 
 @app.post("/api/conversations")
 @app.post("/api/chat/sessions")
@@ -1322,19 +1350,6 @@ def send_message_to_conversation(
     request.session_id = conv_id
     return general_ai_chat(request, current_user, db)
 
-@app.get("/api/cases/archive")
-def get_archived_cases(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    query = db.query(Case).filter(Case.status.in_(["archived", "closed"]))
-    if current_user.role == "officer":
-        query = query.filter(Case.created_by == current_user.id)
-    elif current_user.role == "sho":
-        query = query.filter(Case.station == current_user.station)
-    cases = query.all()
-    return cases
-
 @app.post("/api/chat/sessions")
 def create_chat_session(
     request: CreateSessionRequest,
@@ -1424,6 +1439,14 @@ def general_ai_chat(
     db: Session = Depends(get_db)
 ):
     api_key = request.custom_key or GEMINI_API_KEY
+    mode_guidance = {
+        "legal_research": "Focus on applicable legal provisions and concise source-grounded interpretation.",
+        "investigation": "Focus on lawful investigation steps, procedural safeguards, and documentation.",
+        "evidence_analysis": "Focus on evidence handling, chain of custody, and source verification requirements.",
+        "fir_assistance": "Focus on drafting support and facts requiring verification before FIR filing.",
+        "case_summary": "Focus on a neutral summary of supplied facts; identify gaps without inferring guilt."
+    }
+    response_mode = request.mode if request.mode in mode_guidance else "legal_research"
     
     # Handle ChatSession association
     active_session = None
@@ -1432,15 +1455,16 @@ def general_ai_chat(
             ChatSession.session_id == request.session_id, 
             ChatSession.user_id == current_user.id
         ).first()
+        if not active_session:
+            raise HTTPException(status_code=404, detail="Conversation not found")
 
     if not active_session:
         # Create auto session with title from first message
         session_id = f"session_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{random.randint(1000, 9999)}"
-        auto_title = request.message[:35].strip() + ("..." if len(request.message) > 35 else "")
         active_session = ChatSession(
             session_id=session_id,
             user_id=current_user.id,
-            title=auto_title or "New Legal Consultation"
+            title=conversation_title(request.message)
         )
         db.add(active_session)
         db.commit()
@@ -1448,8 +1472,7 @@ def general_ai_chat(
     else:
         # If session title is default, update it with first user message
         if active_session.title in ["New Legal Consultation", "New Chat"]:
-            auto_title = request.message[:35].strip() + ("..." if len(request.message) > 35 else "")
-            active_session.title = auto_title
+            active_session.title = conversation_title(request.message)
         active_session.updated_at = datetime.utcnow()
         db.commit()
 
@@ -1479,7 +1502,7 @@ def general_ai_chat(
     db.add(user_msg)
     db.commit()
     
-    offline_response = f"General Criminal Law Q&A (OFFLINE MODE). Here are the closest matched legal provisions from BNS, BNSS, BSA:\n\n{matched_text}\nFor deeper explanations and context-aware responses, configure a valid AI API Key in the settings portal."
+    offline_response = f"NyayaIQ {response_mode.replace('_', ' ').title()} (source-grounded offline mode). Here are the closest retrieved provisions from BNS, BNSS, and BSA:\n\n{matched_text}\nSource verification required: verify applicable provisions against current official legal sources before filing or judicial use."
     
     provider, active_key, _ = AIService.get_provider_details(api_key)
     
@@ -1494,21 +1517,24 @@ def general_ai_chat(
             citations=json.dumps(citations_data)
         )
         db.add(assistant_msg)
+        active_session.updated_at = datetime.utcnow()
         db.commit()
         return {"response": offline_response, "citations": citations_data, "session_id": session_id}
         
     try:
         prompt = f"""
-        You are CrimeGPT, a legal Q&A assistant for Indian law enforcement officers.
+        You are NyayaIQ, an investigation and legal intelligence assistant for Indian law enforcement officers.
         Answer the officer's query using the following retrieved criminal code passages:
         {matched_text}
         
         Query: "{request.message}"
         
-        Synthesize a clean, professional answer. You MUST cite the sections (e.g. BNS Section 303) inline when referring to their provisions.
+        Response mode: {response_mode}. {mode_guidance[response_mode]}
+
+        Synthesize a clear, professional answer using only the retrieved provisions for legal citations. Where useful, use short sections such as Legal Position, Applicable Provisions, Investigation Guidance, and Evidence Considerations. Do not invent laws, court cases, or citations; do not determine guilt or make final legal decisions. If the retrieved sources are insufficient, say "Source verification required." End with: "Verify applicable provisions against current official legal sources before filing or judicial use."
         """
         messages = [
-            {"role": "system", "content": "You are CrimeGPT, a legal Q&A assistant for Indian law enforcement officers."},
+            {"role": "system", "content": "You are NyayaIQ, an investigation and legal intelligence assistant for Indian law enforcement officers."},
             {"role": "user", "content": prompt}
         ]
         
@@ -1524,10 +1550,24 @@ def general_ai_chat(
             citations=json.dumps(citations_data)
         )
         db.add(assistant_msg)
+        active_session.updated_at = datetime.utcnow()
         db.commit()
         return {"response": text, "citations": citations_data, "session_id": session_id}
     except Exception as e:
-        return {"response": f"AI Error: {e}. Matching references:\n{offline_response}", "citations": citations_data, "session_id": session_id}
+        fallback_response = f"AI Error: {e}. Matching references:\n{offline_response}"
+        assistant_msg = ChatMessage(
+            user_id=current_user.id,
+            case_id=None,
+            session_id=session_id,
+            message_type="general_assistant",
+            role="assistant",
+            content=fallback_response,
+            citations=json.dumps(citations_data)
+        )
+        db.add(assistant_msg)
+        active_session.updated_at = datetime.utcnow()
+        db.commit()
+        return {"response": fallback_response, "citations": citations_data, "session_id": session_id}
 
 @app.get("/api/chat/history")
 def get_chat_history(
@@ -1728,7 +1768,7 @@ def export_pdf(case_id: int, current_user: User = Depends(get_current_user), db:
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=CrimeGPT_Report_{case_id}.pdf"}
+        headers={"Content-Disposition": f"attachment; filename=NyayaIQ_Report_{case_id}.pdf"}
     )
 
 @app.get("/api/cases/{case_id}/export/docx")
@@ -1760,7 +1800,7 @@ def export_docx(case_id: int, current_user: User = Depends(get_current_user), db
     return Response(
         content=docx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": f"attachment; filename=CrimeGPT_Report_{case_id}.docx"}
+        headers={"Content-Disposition": f"attachment; filename=NyayaIQ_Report_{case_id}.docx"}
     )
 
 # --- SECURITY / AUDIT LOGS & USER MANAGEMENT ---
@@ -2024,20 +2064,6 @@ def update_case_status(case_id: int, payload: CaseStatusUpdateRequest, current_u
     log_audit(db, current_user.username, "UPDATE_CASE_STATUS", f"Case ID {case_id} status updated to {case.status}", case_id=case_id)
     return {"message": f"Case status updated to {case.status}", "status": case.status}
 
-@app.get("/api/cases/archive")
-def get_archived_cases(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role == "admin":
-        cases = db.query(Case).filter((Case.status == "archived") | (Case.status == "closed")).all()
-    elif current_user.role == "sho":
-        cases = db.query(Case).filter((Case.status == "archived") | (Case.status == "closed"), Case.station == current_user.station).all()
-    else:
-        cases = db.query(Case).filter(
-            ((Case.status == "archived") | (Case.status == "closed")),
-            ((Case.created_by == current_user.id) | (Case.assigned_to == current_user.id))
-        ).all()
-        
-    return [serialize_case(c, db) for c in cases]
-
 @app.post("/api/cases/{case_id}/restore")
 def restore_archived_case(case_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     case = verify_case_access(case_id, current_user, db)
@@ -2051,8 +2077,12 @@ def restore_archived_case(case_id: int, current_user: User = Depends(get_current
 
 @app.get("/api/notifications")
 def get_user_notifications(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    notifs = db.query(Notification).filter(Notification.user_id == current_user.id).order_by(Notification.created_at.desc()).limit(50).all()
-    unread_count = db.query(Notification).filter(Notification.user_id == current_user.id, Notification.is_read == 0).count()
+    active_filter = (
+        (Notification.user_id == current_user.id) & 
+        ((Notification.is_dismissed == 0) | (Notification.is_dismissed.is_(None)))
+    )
+    notifs = db.query(Notification).filter(active_filter).order_by(Notification.created_at.desc()).limit(50).all()
+    unread_count = db.query(Notification).filter(active_filter & (Notification.is_read == 0)).count()
     return {
         "notifications": [
             {
@@ -2062,6 +2092,7 @@ def get_user_notifications(current_user: User = Depends(get_current_user), db: S
                 "type": n.type,
                 "link": n.link,
                 "is_read": bool(n.is_read),
+                "is_dismissed": bool(n.is_dismissed),
                 "created_at": n.created_at
             }
             for n in notifs
@@ -2071,17 +2102,38 @@ def get_user_notifications(current_user: User = Depends(get_current_user), db: S
 
 @app.put("/api/notifications/{notification_id}/read")
 def mark_notification_read(notification_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    notif = db.query(Notification).filter(Notification.id == notification_id, Notification.user_id == current_user.id).first()
-    if notif:
-        notif.is_read = 1
-        db.commit()
+    notif = db.query(Notification).filter(Notification.id == notification_id).first()
+    if not notif:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    if notif.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized to access this notification")
+    
+    notif.is_read = 1
+    db.commit()
     return {"message": "Notification marked as read"}
+
+@app.delete("/api/notifications/{notification_id}")
+def dismiss_notification(notification_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    notif = db.query(Notification).filter(Notification.id == notification_id).first()
+    if not notif:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    if notif.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Unauthorized to dismiss this notification")
+
+    notif.is_dismissed = 1
+    db.commit()
+    return {"message": "Notification dismissed successfully", "id": notification_id}
 
 @app.put("/api/notifications/read-all")
 def mark_all_notifications_read(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    db.query(Notification).filter(Notification.user_id == current_user.id, Notification.is_read == 0).update({"is_read": 1})
+    active_filter = (
+        (Notification.user_id == current_user.id) & 
+        ((Notification.is_dismissed == 0) | (Notification.is_dismissed.is_(None))) &
+        (Notification.is_read == 0)
+    )
+    db.query(Notification).filter(active_filter).update({"is_read": 1}, synchronize_session=False)
     db.commit()
-    return {"message": "All notifications marked as read"}
+    return {"message": "All active notifications marked as read"}
 
 # --- LOCATION AUTOCOMPLETE ---
 
@@ -2199,7 +2251,7 @@ def export_chat_pdf(payload: ChatPdfExportRequest, current_user: User = Depends(
         case_title=payload.case_title or "AI Assistant Transcript"
     )
     
-    headers = {"Content-Disposition": f"attachment; filename=CrimeGPT_Chat_Export_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"}
+    headers = {"Content-Disposition": f"attachment; filename=NyayaIQ_Chat_Export_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"}
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
 
 @app.post("/api/chat/upload-attachment")

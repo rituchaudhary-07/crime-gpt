@@ -47,7 +47,7 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
-    cases = relationship("Case", back_populates="creator")
+    cases = relationship("Case", foreign_keys="Case.created_by", back_populates="creator")
 
 class PasswordHistory(Base):
     __tablename__ = "password_histories"
@@ -67,6 +67,7 @@ class Notification(Base):
     type = Column(String, default="info")  # info, case_assigned, case_accepted, case_rejected, evidence_uploaded, fir_generated, admin_approval, security_alert
     link = Column(String, nullable=True)
     is_read = Column(Integer, default=0)  # 0 for unread, 1 for read
+    is_dismissed = Column(Integer, default=0)  # 0 for active, 1 for dismissed
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class Case(Base):
@@ -89,7 +90,7 @@ class Case(Base):
     created_by = Column(Integer, ForeignKey("users.id"))
 
     # Relationships
-    creator = relationship("User", back_populates="cases")
+    creator = relationship("User", foreign_keys=[created_by], back_populates="cases")
     fir_drafts = relationship("FIRDraft", back_populates="case", cascade="all, delete-orphan")
     evidence_items = relationship("EvidenceItem", back_populates="case", cascade="all, delete-orphan")
 
@@ -190,4 +191,18 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def init_db():
+    from sqlalchemy import inspect, text
+    Base.metadata.create_all(bind=engine)
+    if "sqlite" in DATABASE_URL:
+        inspector = inspect(engine)
+        with engine.begin() as conn:
+            for table_name, table in Base.metadata.tables.items():
+                if inspector.has_table(table_name):
+                    existing_columns = {col["name"] for col in inspector.get_columns(table_name)}
+                    for column in table.columns:
+                        if column.name not in existing_columns:
+                            col_type = column.type.compile(engine.dialect)
+                            conn.execute(text(f'ALTER TABLE {table_name} ADD COLUMN "{column.name}" {col_type}'))
 

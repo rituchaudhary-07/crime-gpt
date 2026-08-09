@@ -275,7 +275,7 @@ const defaultSignInContent = {
     },
     quote: {
         text: "Welcome Back! The journey continues.",
-        author: "CrimeGPT Intelligence System"
+        author: "NyayaIQ Intelligence Platform"
     }
 };
 
@@ -286,7 +286,7 @@ const defaultSignUpContent = {
     },
     quote: {
         text: "Create an account. A new chapter awaits.",
-        author: "CrimeGPT Intelligence System"
+        author: "NyayaIQ Intelligence Platform"
     }
 };
 

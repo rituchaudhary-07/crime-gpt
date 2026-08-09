@@ -204,7 +204,8 @@ export const api = {
   },
   
   isAuthenticated: () => {
-    return !!localStorage.getItem("token");
+    const token = localStorage.getItem("token");
+    return !!token && token !== "null" && token !== "undefined";
   },
   
   getUserRole: () => {
@@ -231,6 +232,22 @@ export const api = {
       headers: getHeaders()
     });
     if (!response.ok) throw new Error("Failed to update notification");
+    return response.json();
+  },
+
+  dismissNotification: async (id) => {
+    const response = await fetch(`${API_BASE_URL}/notifications/${id}`, {
+      method: "DELETE",
+      headers: getHeaders()
+    });
+    if (!response.ok) {
+      let msg = "Failed to dismiss notification";
+      try {
+        const err = await response.json();
+        msg = err.detail || msg;
+      } catch (e) {}
+      throw new Error(msg);
+    }
     return response.json();
   },
 
@@ -264,12 +281,10 @@ export const api = {
 
   // Cases
   getCases: async () => {
-    const response = await fetch(`${API_BASE_URL}/cases`, {
+    return requestJson(`${API_BASE_URL}/cases`, {
       method: "GET",
       headers: getHeaders()
-    });
-    if (!response.ok) throw new Error("Failed to load cases");
-    return response.json();
+    }, "Unable to load active case files");
   },
   
   getCase: async (caseId) => {
@@ -282,12 +297,10 @@ export const api = {
   },
 
   getArchivedCases: async () => {
-    const response = await fetch(`${API_BASE_URL}/cases/archive`, {
+    return requestJson(`${API_BASE_URL}/cases/archive`, {
       method: "GET",
       headers: getHeaders()
-    });
-    if (!response.ok) throw new Error("Failed to load archived cases");
-    return response.json();
+    }, "Unable to load archived case files");
   },
 
   restoreCase: async (caseId) => {
@@ -444,50 +457,10 @@ export const api = {
 
   // Conversations API (ChatGPT / Gemini Threads)
   getConversations: async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/conversations`, {
-        method: "GET",
-        headers: getHeaders()
-      });
-      if (response.ok) return await response.json();
-    } catch (e) {}
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/chat/sessions`, {
-        method: "GET",
-        headers: getHeaders()
-      });
-      if (response.ok) return await response.json();
-    } catch (e) {}
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/chat/history?message_type=general_assistant`, {
-        method: "GET",
-        headers: getHeaders()
-      });
-      if (response.ok) {
-        const historyMsgs = await response.json();
-        const sessionMap = {};
-        for (const m of historyMsgs) {
-          const sid = m.session_id || "default_session";
-          if (!sessionMap[sid]) {
-            sessionMap[sid] = {
-              _id: sid,
-              id: sid,
-              session_id: sid,
-              title: m.content ? m.content.slice(0, 35) + "..." : "Legal Inquiry",
-              group: "Today",
-              lastMessagePreview: m.content ? m.content.slice(0, 60) : "",
-              createdAt: m.timestamp || new Date().toISOString(),
-              updatedAt: m.timestamp || new Date().toISOString()
-            };
-          }
-        }
-        return Object.values(sessionMap);
-      }
-    } catch (e) {}
-
-    return [];
+    return requestJson(`${API_BASE_URL}/conversations`, {
+      method: "GET",
+      headers: getHeaders()
+    }, "Unable to load conversation history");
   },
 
   createConversation: async (title = "New Legal Consultation") => {
@@ -574,37 +547,8 @@ export const api = {
   },
 
   getSessionMessages: async (sessionId) => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}/messages`, {
-        method: "GET",
-        headers: getHeaders()
-      });
-      if (res.ok) return await res.json();
-    } catch (e) {}
-
-    try {
-      const res = await fetch(`${API_BASE_URL}/conversations/${sessionId}`, {
-        method: "GET",
-        headers: getHeaders()
-      });
-      if (res.ok) {
-        const data = await res.json();
-        return data.messages || data || [];
-      }
-    } catch (e) {}
-
-    try {
-      const res = await fetch(`${API_BASE_URL}/chat/history?message_type=general_assistant`, {
-        method: "GET",
-        headers: getHeaders()
-      });
-      if (res.ok) {
-        const allMsgs = await res.json();
-        return allMsgs.filter(m => m.session_id === sessionId || !sessionId);
-      }
-    } catch (e) {}
-
-    return [];
+    const conversation = await api.getConversation(sessionId);
+    return conversation.messages || [];
   },
 
   getArchivedCases: async () => {
@@ -617,12 +561,12 @@ export const api = {
   },
 
   // General Legal Q&A Assistant Chat
-  generalChat: async (message, sessionId = null) => {
+  generalChat: async (message, sessionId = null, mode = "legal_research") => {
     const customKey = localStorage.getItem("gemini_api_key") || "";
     const response = await fetch(`${API_BASE_URL}/assistant/chat`, {
       method: "POST",
       headers: getHeaders(),
-      body: JSON.stringify({ message, session_id: sessionId, custom_key: customKey })
+      body: JSON.stringify({ message, session_id: sessionId, custom_key: customKey, mode })
     });
     if (!response.ok) {
       let errMsg = "Assistant Q&A failed";
@@ -646,7 +590,7 @@ export const api = {
     const downloadUrl = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = downloadUrl;
-    link.download = `CrimeGPT_Chat_Transcript_${Date.now()}.pdf`;
+    link.download = `NyayaIQ_Chat_Transcript_${Date.now()}.pdf`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -750,7 +694,7 @@ export const api = {
     const downloadUrl = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = downloadUrl;
-    link.download = `CrimeGPT_Report_${caseId}.pdf`;
+    link.download = `NyayaIQ_Report_${caseId}.pdf`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -767,7 +711,7 @@ export const api = {
     const downloadUrl = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = downloadUrl;
-    link.download = `CrimeGPT_Report_${caseId}.docx`;
+    link.download = `NyayaIQ_Report_${caseId}.docx`;
     document.body.appendChild(link);
     link.click();
     link.remove();

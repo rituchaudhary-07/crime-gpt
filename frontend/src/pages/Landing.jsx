@@ -44,14 +44,14 @@ export default function Landing() {
       <header className="sticky top-4 z-50 mx-auto w-[90%] max-w-7xl rounded-2xl bg-white/80 border border-[#E2E8F0] px-6 py-4 shadow-sm flex items-center justify-between backdrop-blur-md">
         <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate("/")}>
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#2563EB] text-white shadow-sm font-bold">
-            CG
+            NQ
           </div>
           <div>
             <span className="block text-sm font-bold tracking-tight text-[#111827]">
-              Crime<span className="text-[#2563EB]">GPT</span>
+              Nyaya<span className="text-[#2563EB]">IQ</span>
             </span>
             <span className="block text-[9px] font-semibold text-[#6B7280] tracking-widest uppercase">
-              SECURE LAW KERNEL
+              INVESTIGATION &amp; LEGAL INTELLIGENCE
             </span>
           </div>
         </div>
@@ -71,7 +71,7 @@ export default function Landing() {
         {/* Version Badge */}
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#EFF6FF] border border-[#BFDBFE] text-[#2563EB] text-[10px] font-mono tracking-wider font-semibold mx-auto">
           <span className="h-1.5 w-1.5 rounded-full bg-[#2563EB] animate-pulse"></span>
-          <span>CRIMEGPT 2026 EDITION • REFORM COMPLIANT</span>
+          <span>NYAYAIQ • INVESTIGATION &amp; LEGAL INTELLIGENCE</span>
         </div>
 
         {/* Hero Title */}

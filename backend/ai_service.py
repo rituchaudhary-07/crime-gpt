@@ -71,7 +71,7 @@ class AIService:
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                     "HTTP-Referer": "https://crimegpt.gov.in",
-                    "X-Title": "CrimeGPT"
+                    "X-Title": "NyayaIQ"
                 }
                 
                 # Check models fallback chain

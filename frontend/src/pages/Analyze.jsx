@@ -811,7 +811,7 @@ export default function Analyze() {
                           {msg.content}
                         </div>
                         <span className="text-[8px] font-mono text-slate-550 mt-1 uppercase">
-                          {msg.role === "user" ? "Officer Logs" : "CrimeGPT SOP Kernel"} | {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          {msg.role === "user" ? "Officer Logs" : "NyayaIQ SOP Guidance"} | {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                         </span>
                       </div>
                     ))

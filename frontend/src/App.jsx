@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, Link, useLocation, useNavigate 
 import { 
   LayoutDashboard, FilePlus, Briefcase, MessageSquareCode, 
   FileText, Search, ClipboardList, BarChart3, History, 
-  Settings, LogOut, User, Bell, Calendar, SearchCheck, Globe, Menu
+  Settings, LogOut, User, Bell, Calendar, SearchCheck, Globe, Menu, X, Loader2
 } from "lucide-react";
 import { api } from "./utils/api";
 
@@ -34,6 +34,8 @@ function Layout({ children }) {
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showMobileNav, setShowMobileNav] = useState(false);
+  const [dismissingIds, setDismissingIds] = useState(new Set());
+  const [toastError, setToastError] = useState("");
 
   // Global Search State
   const [globalQuery, setGlobalQuery] = useState("");
@@ -79,9 +81,33 @@ function Layout({ children }) {
   const loadNotifications = async () => {
     try {
       const data = await api.getNotifications();
-      setNotifications(data);
+      const notifArray = Array.isArray(data) ? data : (data?.notifications || []);
+      setNotifications(notifArray);
     } catch (err) {
       console.log("Failed loading notifications:", err);
+      setNotifications([]);
+    }
+  };
+
+  const handleDismissNotification = async (e, id) => {
+    e.stopPropagation();
+    if (dismissingIds.has(id)) return;
+
+    setDismissingIds(prev => new Set(prev).add(id));
+    setToastError("");
+
+    try {
+      await api.dismissNotification(id);
+      setNotifications(prev => (Array.isArray(prev) ? prev.filter(n => n.id !== id) : []));
+    } catch (err) {
+      console.error("Failed to dismiss notification:", err);
+      setToastError(err.message || "Failed to dismiss notification. Please try again.");
+    } finally {
+      setDismissingIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   };
 
@@ -105,7 +131,8 @@ function Layout({ children }) {
     }
   };
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const notifList = Array.isArray(notifications) ? notifications : [];
+  const unreadCount = notifList.filter(n => !n.is_read && !n.read).length;
 
   const navItems = [
     { name: "Dashboard", path: "/dashboard", icon: <LayoutDashboard className="h-4.5 w-4.5" /> },
@@ -143,14 +170,14 @@ function Layout({ children }) {
           {/* Logo Brand Header */}
           <div className="h-16 flex items-center px-6 border-b border-[#F1F5F9] gap-3 cursor-pointer" onClick={() => navigate("/dashboard")}>
             <div className="h-8 w-8 bg-[#2563EB] rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-sm">
-              CG
+              NQ
             </div>
             <div>
               <span className="block text-sm font-bold tracking-tight text-[#111827]">
-                Crime<span className="text-[#2563EB]">GPT</span>
+                Nyaya<span className="text-[#2563EB]">IQ</span>
               </span>
               <span className="block text-[9px] font-medium text-[#6B7280] tracking-widest uppercase">
-                POLICE HQ KERNEL
+                AI-POWERED INVESTIGATION &amp; LEGAL INTELLIGENCE
               </span>
             </div>
           </div>
@@ -251,43 +278,106 @@ function Layout({ children }) {
 
               {/* Notification Popover Dropdown */}
               {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl z-50 overflow-hidden animate-slide-down">
-                  <div className="p-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-900 font-mono uppercase">System Alert Notifications</span>
-                    <button
-                      onClick={async () => {
-                        await api.markAllNotificationsRead();
-                        loadNotifications();
-                      }}
-                      className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
-                    >
-                      Mark All Read
-                    </button>
-                  </div>
+                <>
+                  <div 
+                    className="fixed inset-0 z-40 bg-transparent"
+                    onClick={() => setShowNotifications(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl z-50 overflow-hidden animate-slide-down">
+                    <div className="p-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 font-mono uppercase">System Alert Notifications</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={async () => {
+                            try {
+                              await api.markAllNotificationsRead();
+                              loadNotifications();
+                            } catch (err) {
+                              setToastError("Failed to mark notifications as read.");
+                            }
+                          }}
+                          className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
+                        >
+                          Mark All Read
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowNotifications(false)}
+                          aria-label="Close notification panel"
+                          title="Close panel"
+                          className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-all cursor-pointer"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                  {toastError && (
+                    <div className="bg-red-50 border-b border-red-100 px-3 py-1.5 text-[10px] font-bold text-red-600 flex items-center justify-between">
+                      <span className="truncate pr-2">{toastError}</span>
+                      <button onClick={() => setToastError("")} className="text-red-400 hover:text-red-600 font-bold shrink-0">✕</button>
+                    </div>
+                  )}
 
                   <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 text-xs">
-                    {notifications.length === 0 ? (
-                      <div className="p-6 text-center text-slate-400 text-[11px] italic">No notifications</div>
+                    {notifList.length === 0 ? (
+                      <div className="p-6 text-center text-slate-400 text-[11px] space-y-1">
+                        <p className="font-bold text-slate-700">No notifications</p>
+                        <p className="text-[10px] text-slate-400">You're all caught up.</p>
+                      </div>
                     ) : (
-                      notifications.map((n) => (
-                        <div
-                          key={n.id}
-                          onClick={async () => {
-                            await api.markNotificationRead(n.id);
-                            loadNotifications();
-                          }}
-                          className={`p-3.5 hover:bg-slate-50 cursor-pointer transition-colors ${!n.read ? 'bg-blue-50/50' : ''}`}
-                        >
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-bold text-slate-900 text-[11px]">{n.title}</span>
-                            <span className="text-[9px] font-mono text-slate-400">{new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      notifList.map((n) => {
+                        const isDismissing = dismissingIds.has(n.id);
+                        const isUnread = !n.is_read && !n.read;
+                        return (
+                          <div
+                            key={n.id}
+                            onClick={async () => {
+                              try {
+                                if (isUnread) {
+                                  await api.markNotificationRead(n.id);
+                                  loadNotifications();
+                                }
+                                if (n.link) {
+                                  navigate(n.link);
+                                  setShowNotifications(false);
+                                }
+                              } catch (err) {
+                                console.error("Error handling notification click:", err);
+                              }
+                            }}
+                            className={`group relative p-3.5 hover:bg-slate-50 cursor-pointer transition-colors ${isUnread ? 'bg-blue-50/50' : ''}`}
+                          >
+                            <div className="flex items-start justify-between gap-2 mb-1">
+                              <span className="font-bold text-slate-900 text-[11px] leading-tight pr-2 flex-1">{n.title}</span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="text-[9px] font-mono text-slate-400">
+                                  {n.created_at ? new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={isDismissing}
+                                  onClick={(e) => handleDismissNotification(e, n.id)}
+                                  aria-label="Dismiss notification"
+                                  title="Dismiss notification"
+                                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 sm:opacity-0 p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-slate-400"
+                                >
+                                  {isDismissing ? (
+                                    <Loader2 className="h-3 w-3 animate-spin text-slate-500" />
+                                  ) : (
+                                    <X className="h-3 w-3" />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                            <p className="text-[11px] text-slate-[#475569] leading-snug">{n.message}</p>
                           </div>
-                          <p className="text-[11px] text-slate-600 leading-snug">{n.message}</p>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </div>
+                </>
               )}
             </div>
 
@@ -423,10 +513,59 @@ function AdminRoute({ children }) {
   return role === "admin" ? children : <Navigate to="/dashboard" replace />;
 }
 
+// React Error Boundary to catch render failures gracefully
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("NyayaIQ UI Boundary Error:", error, errorInfo);
+  }
+
+  handleReset = () => {
+    localStorage.clear();
+    window.location.href = "/login";
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-6 text-sans">
+          <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full text-center space-y-5">
+            <div className="h-14 w-14 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center mx-auto text-xl font-bold border border-red-100">
+              ⚠️
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Session Interface Reset Required</h2>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                An unexpected UI rendering error occurred or stale authentication data was found in your browser cache.
+              </p>
+            </div>
+            <button
+              onClick={this.handleReset}
+              className="w-full bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-xs py-3 rounded-xl shadow-md transition-all cursor-pointer"
+            >
+              Clear Session Cache & Sign In Again
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Routes>
         {/* Landing Page */}
         <Route 
           path="/" 
@@ -544,5 +683,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
+  </ErrorBoundary>
   );
 }

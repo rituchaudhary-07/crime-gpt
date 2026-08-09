@@ -108,7 +108,7 @@ export default function Settings() {
           </div>
 
           <p className="text-xs text-[#6B7280] leading-relaxed">
-            CrimeGPT utilizes advanced LLM models (DeepSeek, Llama, GPT) to draft offense sheets and citations. Provide your own key (OpenRouter, Groq, or OpenAI) to override backend environment defaults.
+            NyayaIQ uses advanced language models to assist with offense sheets and citations. Provide your own key (OpenRouter, Groq, or OpenAI) to override backend environment defaults.
           </p>
 
           <form onSubmit={handleSaveKey} className="space-y-4 text-xs">

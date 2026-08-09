@@ -9,9 +9,13 @@ import Toast from "../components/Toast";
 
 export default function AIAssistant() {
   const [sessions, setSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [historyError, setHistoryError] = useState("");
+  const [deletingSessionId, setDeletingSessionId] = useState(null);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
+  const [assistantMode, setAssistantMode] = useState("legal_research");
   const [loading, setLoading] = useState(false);
   const chatBottomRef = useRef(null);
 
@@ -63,6 +67,14 @@ export default function AIAssistant() {
     }
   ];
 
+  const assistantModes = [
+    { id: "legal_research", label: "Legal Research" },
+    { id: "investigation", label: "Investigation" },
+    { id: "evidence_analysis", label: "Evidence Analysis" },
+    { id: "fir_assistance", label: "FIR Assistance" },
+    { id: "case_summary", label: "Case Summary" }
+  ];
+
   useEffect(() => {
     loadChatSessions();
   }, []);
@@ -74,6 +86,8 @@ export default function AIAssistant() {
   }, [messages]);
 
   const loadChatSessions = async (selectSessionId = null) => {
+    setSessionsLoading(true);
+    setHistoryError("");
     try {
       const data = await api.getChatSessions();
       const sessionList = Array.isArray(data) ? data : [];
@@ -89,7 +103,9 @@ export default function AIAssistant() {
         loadSessionMessages(validId);
       }
     } catch (err) {
-      console.log("Failed loading chat sessions:", err);
+      setHistoryError(err.message || "Unable to load chat history.");
+    } finally {
+      setSessionsLoading(false);
     }
   };
 
@@ -101,6 +117,10 @@ export default function AIAssistant() {
       setActiveSessionId(sessionId);
       localStorage.setItem("crimegpt_active_session", sessionId);
     } catch (err) {
+      if (err.status === 404) {
+        setSessions(prev => prev.filter(s => (s.session_id || s.id) !== sessionId));
+        handleNewChat();
+      }
       setToast({ type: "error", message: "Failed loading session messages: " + err.message });
     } finally {
       setLoading(false);
@@ -130,7 +150,7 @@ export default function AIAssistant() {
     setLoading(true);
 
     try {
-      const res = await api.generalChat(query, activeSessionId);
+      const res = await api.generalChat(query, activeSessionId, assistantMode);
       const botMsg = { 
         role: "assistant", 
         content: res.response, 
@@ -163,6 +183,7 @@ export default function AIAssistant() {
         citations: [] 
       };
       setMessages(prev => [...prev, errorMsg]);
+      setToast({ type: "error", message: "Message was not saved: " + err.message });
     } finally {
       setLoading(false);
     }
@@ -185,6 +206,7 @@ export default function AIAssistant() {
     e.stopPropagation();
     if (!window.confirm("Are you sure you want to delete this conversation thread?")) return;
     try {
+      setDeletingSessionId(sessionId);
       await api.deleteChatSession(sessionId);
       if (activeSessionId === sessionId) {
         handleNewChat();
@@ -194,6 +216,8 @@ export default function AIAssistant() {
       setToast({ type: "success", message: "Conversation deleted." });
     } catch (err) {
       setToast({ type: "error", message: "Delete failed: " + err.message });
+    } finally {
+      setDeletingSessionId(null);
     }
   };
 
@@ -317,7 +341,17 @@ export default function AIAssistant() {
         {/* Scrollable Conversation Threads */}
         <div className="flex-1 overflow-y-auto p-3 space-y-5 text-xs">
           
-          {validSessions.length === 0 ? (
+          {sessionsLoading ? (
+            <div className="space-y-2 p-3" aria-label="Loading chat history">
+              {[1, 2, 3].map(item => <div key={item} className="h-10 animate-pulse rounded-xl bg-slate-800" />)}
+            </div>
+          ) : historyError ? (
+            <div className="space-y-3 p-4 text-center text-xs text-slate-400">
+              <ShieldAlert className="mx-auto h-5 w-5 text-amber-400" />
+              <p className="leading-relaxed">{historyError}</p>
+              <button onClick={() => loadChatSessions()} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2.5 py-1.5 text-[10px] font-bold text-slate-200 hover:bg-slate-800"><RefreshCw className="h-3 w-3" />Retry</button>
+            </div>
+          ) : validSessions.length === 0 ? (
             <div className="p-6 text-center text-slate-500 text-xs space-y-2">
               <MessageSquare className="h-6 w-6 mx-auto opacity-50 text-blue-400" />
               <p className="font-semibold text-slate-400">No Chat History</p>
@@ -404,10 +438,11 @@ export default function AIAssistant() {
 
                             <button
                               onClick={(e) => handleDeleteSession(e, sid)}
+                              disabled={deletingSessionId === sid}
                               className="p-1 text-slate-400 hover:text-rose-400"
                               title="Delete Chat"
                             >
-                              <Trash2 className="h-3 w-3" />
+                              {deletingSessionId === sid ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                             </button>
                           </div>
                         </div>
@@ -425,7 +460,7 @@ export default function AIAssistant() {
         <div className="p-3.5 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between text-[11px] text-slate-400">
           <div className="flex items-center gap-2 truncate">
             <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-            <span className="font-bold truncate">Police Legal Core v1.0</span>
+            <span className="font-bold truncate">NyayaIQ Legal Intelligence</span>
           </div>
           <span className="font-mono text-[9px] text-slate-500">PROD</span>
         </div>
@@ -439,18 +474,19 @@ export default function AIAssistant() {
         <div className="px-6 py-3.5 border-b border-slate-200 bg-white flex items-center justify-between z-10">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-blue-600" />
-            <h2 className="text-xs font-bold text-slate-900 font-mono uppercase tracking-wide">
-              {activeSessionId 
-                ? (sessions.find(s => s.session_id === activeSessionId)?.title || "Active Legal Consultation Thread") 
-                : "New Investigation Thread"}
-            </h2>
+            <div>
+              <h2 className="text-xs font-bold text-slate-900 font-mono uppercase tracking-wide">NYAYAIQ ASSISTANT</h2>
+              <p className="text-[10px] text-slate-500">{activeSessionId ? (sessions.find(s => s.session_id === activeSessionId)?.title || "Active legal consultation") : "Investigation & Legal Intelligence"}</p>
+            </div>
           </div>
 
+          <div className="flex items-center gap-2">
+          <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-emerald-700"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />AI engine active</span>
           {messages.length > 0 && (
             <button
               onClick={() => {
                 try {
-                  api.exportChatPDF(messages, "CrimeGPT Assistant Transcript");
+                  api.exportChatPDF(messages, "NyayaIQ Assistant Transcript");
                   setToast({ type: "success", message: "PDF Log generated successfully." });
                 } catch (err) {
                   setToast({ type: "error", message: "PDF export failed: " + err.message });
@@ -462,6 +498,7 @@ export default function AIAssistant() {
               <span>Export PDF Log</span>
             </button>
           )}
+          </div>
         </div>
 
         {/* Message Stream */}
@@ -475,10 +512,15 @@ export default function AIAssistant() {
                 <div className="h-12 w-12 rounded-2xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center mx-auto shadow-xs">
                   <Cpu className="h-6 w-6" />
                 </div>
-                <h1 className="text-xl font-bold tracking-tight text-slate-900">CrimeGPT Legal Assistant</h1>
+                <h1 className="text-xl font-bold tracking-tight text-slate-900">Investigation &amp; Legal Intelligence Assistant</h1>
                 <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                  Ask criminal code questions or select a suggested legal query below. Suggested prompt cards will automatically hide once you start typing.
+                  Research BNS, BNSS and BSA provisions, evidence handling, cybercrime procedures, and FIR preparation using available legal sources.
                 </p>
+                <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Legal intelligence online</div>
+              </div>
+
+              <div className="flex flex-wrap justify-center gap-2">
+                {assistantModes.map(mode => <button key={mode.id} onClick={() => setAssistantMode(mode.id)} className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition-colors ${assistantMode === mode.id ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}>{mode.label}</button>)}
               </div>
 
               {/* 4-6 Suggested Question Cards Grid */}
@@ -526,7 +568,7 @@ export default function AIAssistant() {
 
                   {/* Message Metadata & Copy Button */}
                   <div className="flex items-center gap-3 mt-1.5 text-[9px] font-mono text-slate-400 uppercase">
-                    <span>{msg.role === "user" ? "Officer Inquiry" : "CrimeGPT Assistant"}</span>
+                    <span>{msg.role === "user" ? "User Query" : "NyayaIQ Assistant"}</span>
                     {msg.role === "assistant" && (
                       <>
                         <span>•</span>
@@ -635,7 +677,7 @@ export default function AIAssistant() {
             </form>
 
             <p className="text-[10px] text-center text-slate-400 font-mono">
-              CrimeGPT synthesizes official criminal code provisions (BNS, BNSS, BSA). Officers must verify citations prior to judicial filing.
+              Source-grounded assistance only. Verify applicable provisions against current official legal sources before filing or judicial use.
             </p>
 
           </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Briefcase, Search, FileDown, Eye, Edit3, 
@@ -21,6 +21,7 @@ export default function CaseManagement() {
   const [error, setError] = useState("");
   const [actionSuccess, setActionSuccess] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const loadInProgressRef = useRef(false);
 
   // Decline Modal State
   const [declineModalCaseId, setDeclineModalCaseId] = useState(null);
@@ -38,6 +39,8 @@ export default function CaseManagement() {
   }, []);
 
   const loadCases = async () => {
+    if (loadInProgressRef.current) return;
+    loadInProgressRef.current = true;
     setLoading(true);
     setError("");
     try {
@@ -48,9 +51,19 @@ export default function CaseManagement() {
       setCases(activeData.filter(c => c.status !== "archived" && c.status !== "closed"));
       setArchivedCases(archiveData);
     } catch (err) {
-      setError("Failed to load case files: " + err.message);
+      console.error("Case directory load failed:", err);
+      if (err.status === 401) {
+        setError("Your session has expired. Please sign in again.");
+      } else if (err.status === 403) {
+        setError("You do not have permission to view these case files.");
+      } else if (err.code === "network_or_cors" || err.code === "timeout") {
+        setError("Unable to connect to the case management service.");
+      } else {
+        setError(err.message || "Unable to load case files.");
+      }
     } finally {
       setLoading(false);
+      loadInProgressRef.current = false;
     }
   };
 
@@ -156,6 +169,7 @@ export default function CaseManagement() {
   };
 
   const currentList = activeTab === "active" ? cases : archivedCases;
+  const availableStatuses = [...new Set(currentList.map(c => c.status).filter(Boolean))].sort();
 
   const filteredCases = currentList.filter(c => {
     const query = searchQuery.toLowerCase().trim();
@@ -249,17 +263,7 @@ export default function CaseManagement() {
           className="saas-input px-3.5 py-2 text-xs font-semibold cursor-pointer"
         >
           <option value="all">All Case Statuses ({currentList.length})</option>
-          <option value="draft">Draft</option>
-          <option value="pending_approval">Pending Approval</option>
-          <option value="assigned">Assigned</option>
-          <option value="accepted">Accepted</option>
-          <option value="rejected_by_officer">Rejected by Officer</option>
-          <option value="under_investigation">Under Investigation</option>
-          <option value="evidence_collection">Evidence Collection</option>
-          <option value="fir_draft_ready">FIR Draft Ready</option>
-          <option value="submitted">Submitted</option>
-          <option value="closed">Closed</option>
-          <option value="archived">Archived</option>
+          {availableStatuses.map(status => <option key={status} value={status}>{formatStatus(status)}</option>)}
         </select>
 
       </div>
@@ -269,7 +273,9 @@ export default function CaseManagement() {
         <div className="text-center py-16 text-xs font-semibold text-slate-500 animate-pulse">QUERYING CASE DIRECTORY...</div>
       ) : filteredCases.length === 0 ? (
         <div className="bg-white p-16 rounded-2xl border border-slate-200 text-center text-xs text-slate-500 italic">
-          No investigation dossier matching search filter criteria.
+          {searchQuery || statusFilter !== "all"
+            ? "No investigation dossier matches the current search or status filter."
+            : activeTab === "archive" ? "No archived investigation files." : "No investigation files found."}
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">

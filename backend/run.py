@@ -1,4 +1,4 @@
-"""Development launcher for the CrimeGPT FastAPI service."""
+"""Development launcher for the NyayaIQ FastAPI service."""
 import os
 
 import uvicorn

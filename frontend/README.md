@@ -1,4 +1,4 @@
-# CrimeGPT frontend
+# NyayaIQ frontend
 
 ## Local development
 

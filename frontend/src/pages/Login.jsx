@@ -206,7 +206,7 @@ export default function Login() {
           onClick={() => setUseAuthUI(false)}
           className="fixed top-4 left-4 z-50 rounded-full border border-slate-300 bg-white/90 px-4 py-2 text-xs font-bold text-slate-800 shadow-md backdrop-blur-sm transition-all hover:bg-slate-100 cursor-pointer"
         >
-          ← Switch to Standard Police Terminal Form
+          ← Switch to Standard NyayaIQ Access Form
         </button>
         <AuthUI
           signInContent={{
@@ -215,8 +215,8 @@ export default function Login() {
               alt: "Law enforcement legal intelligence platform"
             },
             quote: {
-              text: "CrimeGPT Intelligence System • Directorate of Cyber Crime",
-              author: "Police HQ Command Kernel"
+              text: "NyayaIQ • Investigation & Legal Intelligence",
+              author: "NyayaIQ Intelligence Platform"
             }
           }}
           signUpContent={{
@@ -257,7 +257,7 @@ export default function Login() {
           </button>
         </div>
         <h1 className="text-3xl font-extrabold tracking-tight text-slate-950">
-          Crime<span className="text-blue-500">GPT</span> Police Terminal
+          Nyaya<span className="text-blue-500">IQ</span> Access Portal
         </h1>
         <p className="text-sm font-medium text-slate-500">
           Digital Legal Intelligence & Crime Investigation System • Directorate of Cyber Crime
@@ -420,7 +420,7 @@ export default function Login() {
                 disabled={loading}
                 className="w-full btn-primary py-3 flex items-center justify-center gap-2 cursor-pointer font-bold text-sm mt-2"
               >
-                <span>{loading ? "Authenticating Session..." : "Access Police Terminal"}</span>
+                <span>{loading ? "Authenticating Session..." : "Access NyayaIQ"}</span>
                 <ArrowRight className="h-4 w-4" />
               </button>
             </form>
@@ -828,7 +828,7 @@ export default function Login() {
         <div className="relative z-10 flex items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-blue-200"><Shield className="h-4 w-4" />Law-enforcement intelligence</div>
         <div className="relative z-10 max-w-md">
           <div className="mb-8 flex h-64 items-center justify-center rounded-[2rem] border border-white/10 bg-white/[.04] backdrop-blur-sm">
-            <img src={heroIllustration} alt="CrimeGPT intelligence platform" className="h-52 w-auto drop-shadow-[0_20px_30px_rgba(0,0,0,.35)]" />
+            <img src={heroIllustration} alt="NyayaIQ intelligence platform" className="h-52 w-auto drop-shadow-[0_20px_30px_rgba(0,0,0,.35)]" />
           </div>
           <h2 className="text-4xl font-bold leading-tight tracking-tight text-white">Intelligence that keeps every case moving.</h2>
           <p className="mt-5 max-w-sm text-base leading-relaxed text-slate-300">A protected workspace for case records, legal research, evidence, and compliant reporting.</p>

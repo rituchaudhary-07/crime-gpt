@@ -72,11 +72,11 @@ export default function Dashboard() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="mb-1 text-[10px] font-bold uppercase tracking-[.16em] text-[#2563EB]">Operations overview</p>
-            <h2 className="text-xl font-bold tracking-tight text-[#0F172A] sm:text-2xl">Command centre</h2>
-            <p className="mt-1 text-sm text-[#64748B]">Review your caseload and continue priority investigation work.</p>
+            <h2 className="text-xl font-bold tracking-tight text-[#0F172A] sm:text-2xl">Investigation Command Centre</h2>
+            <p className="mt-1 text-sm text-[#64748B]">Review case activity, legal intelligence, and priority investigation work.</p>
           </div>
           <span className="w-fit rounded-full border border-[#E2E8F0] bg-white px-3 py-1.5 text-[10px] font-bold text-[#64748B] font-mono tracking-widest uppercase shadow-sm">
-            JURISDICTION STATION: {stats.recent_cases[0]?.station || "Central Cyber PS"}
+            JURISDICTION STATION: {stats?.recent_cases?.[0]?.station || "Central Cyber PS"}
           </span>
         </div>
 
@@ -108,10 +108,10 @@ export default function Dashboard() {
             </div>
             <div>
               <h3 className="text-sm font-bold text-[#111827] flex items-center gap-1.5">
-                <span>Ask CrimeGPT</span>
+                <span>Ask NyayaIQ</span>
                 <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
               </h3>
-              <p className="text-xs text-[#6B7280] mt-1">Query semantic databases for procedural compliance guidelines.</p>
+              <p className="text-xs text-[#6B7280] mt-1">Query verified legal sources and investigation guidance.</p>
             </div>
           </div>
 
@@ -124,10 +124,10 @@ export default function Dashboard() {
             </div>
             <div>
               <h3 className="text-sm font-bold text-[#111827] flex items-center gap-1.5">
-                <span>IPC to BNS Converter</span>
+                <span>Legacy Law Converter</span>
                 <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
               </h3>
-              <p className="text-xs text-[#6B7280] mt-1">Lookup legacy provision replacements and court citations.</p>
+              <p className="text-xs text-[#6B7280] mt-1">Map legacy IPC references to corresponding current legal provisions.</p>
             </div>
           </div>
 
@@ -186,12 +186,12 @@ export default function Dashboard() {
           <div className="space-y-3">
             {loading ? (
               <div className="space-y-3">{[1, 2, 3].map((item) => <div key={item} className="rounded-2xl border border-[#E2E8F0] bg-white p-4"><div className="dashboard-skeleton h-3 w-2/5 rounded" /><div className="dashboard-skeleton mt-3 h-2.5 w-3/5 rounded" /></div>)}</div>
-            ) : stats.recent_cases.length === 0 ? (
+            ) : (!stats?.recent_cases || stats.recent_cases.length === 0) ? (
               <div className="bg-white p-8 rounded-2xl border border-[#E2E8F0] text-center text-xs text-[#6B7280] italic">
                 No active case logs recorded.
               </div>
             ) : (
-              stats.recent_cases.map((c) => (
+              (stats.recent_cases || []).map((c) => (
                 <div 
                   key={c.id}
                   onClick={() => navigate(`/fir-generator?caseId=${c.id}`)}
@@ -199,11 +199,11 @@ export default function Dashboard() {
                 >
                   <div className="space-y-1 truncate">
                     <h4 className="text-xs font-bold text-[#111827] truncate">{c.title}</h4>
-                    <span className="text-[10px] text-[#6B7280] font-mono block">DATE: {c.date || "N/A"} • PS: {c.station || "Central Cyber Cell"}</span>
+                    <span className="text-[10px] text-[#6B7280] font-mono block">DATE: {c.created_at ? new Date(c.created_at).toLocaleDateString() : "N/A"} • PS: {c.station || "Central Cyber Cell"}</span>
                   </div>
 
                   <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border uppercase shrink-0 ${getStatusBadge(c.status)}`}>
-                    {c.status.replace("_", " ")}
+                    {(c.status || "draft").replace("_", " ")}
                   </span>
                 </div>
               ))

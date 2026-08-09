@@ -478,7 +478,7 @@ Contacts: ${formData.witness_contact || "N/A"}`;
               <div className="space-y-2">
                 <h3 className="text-base font-bold text-[#111827]">Case Details Compiled</h3>
                 <p className="text-xs text-[#6B7280] max-w-md mx-auto leading-relaxed">
-                  Click below to create the official database entry. CrimeGPT will automatically analyze the details, retrieve matching legal code sections, and build your draft FIR.
+                  Click below to create the official database entry. NyayaIQ will analyze the details, retrieve matching legal code sections, and build your draft FIR.
                 </p>
               </div>
 
