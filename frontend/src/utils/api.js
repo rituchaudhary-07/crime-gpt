@@ -38,7 +38,10 @@ const formatErrorMessage = (detail, fallbackMessage, status) => {
     return detail.map(item => item.msg || JSON.stringify(item)).join("; ");
   }
   if (typeof detail === "object") {
-    return detail.detail || detail.message || JSON.stringify(detail);
+    const nestedDetail = detail.detail ?? detail.message ?? detail.error;
+    return nestedDetail
+      ? formatErrorMessage(nestedDetail, fallbackMessage, status)
+      : JSON.stringify(detail);
   }
   return String(detail);
 };
