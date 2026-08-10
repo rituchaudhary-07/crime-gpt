@@ -143,3 +143,22 @@ def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
         )
     return current_user
 
+def create_action_token(user_id: int, action: str, expires_hours: int = 168) -> str:
+    to_encode = {
+        "user_id": user_id,
+        "action": action,
+        "exp": datetime.utcnow() + timedelta(hours=expires_hours)
+    }
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def verify_action_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired approval token."
+        )
+
+

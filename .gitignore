@@ -22,6 +22,7 @@ backend/db/*.db
 .env
 .env.*
 !frontend/.env.example
+!backend/.env.example
 backend/.env
 frontend/.env
 

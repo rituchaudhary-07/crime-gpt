@@ -20,13 +20,13 @@ from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, Depends, HTTPException, status, Response, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
-from fastapi.responses import Response, FileResponse
+from fastapi.responses import Response, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from backend.ai_service import AIService
 
-from backend.config import GEMINI_API_KEY, CORS_ORIGINS
+from backend.config import GEMINI_API_KEY, CORS_ORIGINS, APP_BASE_URL, ADMIN_NOTIFICATION_EMAIL
 from backend.database import (
     engine, Base, get_db, init_db, User, Case, Log, 
     FIRDraft, LegalSectionCited, EvidenceItem, ChatMessage,
@@ -35,13 +35,16 @@ from backend.database import (
 from backend.auth import (
     get_password_hash, verify_password, create_access_token, create_refresh_token,
     get_current_user, get_current_admin, validate_email, validate_phone,
-    validate_password_strength, verify_password_history
+    validate_password_strength, verify_password_history,
+    create_action_token, verify_action_token
 )
+from backend.email_service import send_registration_approval_email
 from backend.rag import (
     generate_analysis, analyze_intake, search_laws, 
     OLD_TO_NEW_MAPPING, LEGAL_DATABASE
 )
 from backend.exporter import generate_pdf_report, generate_docx_report, generate_chat_pdf_report
+
 
 # Initialize database & run missing column auto-migration
 init_db()
@@ -458,7 +461,7 @@ def register(user_data: UserCreate, request: Request, db: Session = Depends(get_
     db.add(PasswordHistory(user_id=user.id, password_hash=hashed_pw))
     db.commit()
 
-    # Notify Admins about pending officer
+    # Notify Admins about pending officer via in-app notifications
     admins = db.query(User).filter(User.role == "admin").all()
     for admin_user in admins:
         create_notification(
@@ -469,6 +472,27 @@ def register(user_data: UserCreate, request: Request, db: Session = Depends(get_
             type="admin_approval"
         )
 
+    # Generate one-click email action tokens & send email to rituchaudhary15077@gmail.com
+    try:
+        approve_tok = create_action_token(user.id, "approve_user", expires_hours=168)
+        reject_tok = create_action_token(user.id, "reject_user", expires_hours=168)
+        base_url = str(request.base_url).rstrip('/')
+        approve_url = f"{base_url}/api/admin/approve-by-token?token={approve_tok}"
+        reject_url = f"{base_url}/api/admin/reject-by-token?token={reject_tok}"
+
+        user_dict = {
+            "username": user.username,
+            "email": user.email,
+            "phone": user.phone,
+            "badge_number": user.badge_number,
+            "station": user.station,
+            "designation": user.designation,
+            "role": user.role
+        }
+        send_registration_approval_email(user_dict, approve_url, reject_url)
+    except Exception as err:
+        logger.error("Failed to generate or send registration approval email: %s", err)
+
     log_audit(
         db, 
         user.username, 
@@ -478,6 +502,7 @@ def register(user_data: UserCreate, request: Request, db: Session = Depends(get_
         user_agent=user_agent
     )
     return user
+
 
 @app.post("/api/auth/login", response_model=Token)
 def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -1840,6 +1865,104 @@ def reject_user(user_id: int, current_user: User = Depends(get_current_admin), d
     db.commit()
     log_audit(db, current_user.username, "USER_REJECTED", f"Rejected registration for officer '{target_user.username}'")
     return {"message": f"Officer '{target_user.username}' registration rejected"}
+
+@app.get("/api/admin/approve-by-token", response_class=HTMLResponse)
+def approve_user_by_token(token: str, db: Session = Depends(get_db)):
+    try:
+        payload = verify_action_token(token)
+        if payload.get("action") != "approve_user":
+            raise HTTPException(status_code=400, detail="Invalid action token")
+        
+        user_id = payload.get("user_id")
+        target_user = db.query(User).filter(User.id == user_id).first()
+        if not target_user:
+            return HTMLResponse(content="<h2>User not found</h2><p>This registration request no longer exists.</p>", status_code=404)
+        
+        target_user.status = "approved"
+        db.commit()
+        log_audit(db, "EMAIL_ADMIN", "USER_APPROVED_VIA_EMAIL", f"Officer '{target_user.username}' (Badge: {target_user.badge_number}) approved via email link")
+        
+        html_code = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>NyayaIQ - Officer Approved</title>
+            <style>
+                body {{ font-family: 'Segoe UI', Arial, sans-serif; background-color: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }}
+                .card {{ background: #1e293b; border: 1px solid #334155; padding: 40px; border-radius: 16px; text-align: center; max-width: 480px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }}
+                .icon {{ width: 64px; height: 64px; background: #059669; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 32px; margin: 0 auto 20px auto; }}
+                h1 {{ margin: 0 0 10px 0; font-size: 24px; color: #34d399; }}
+                p {{ color: #94a3b8; font-size: 15px; line-height: 1.6; margin-bottom: 24px; }}
+                .details {{ background: #0f172a; padding: 16px; border-radius: 8px; text-align: left; margin-bottom: 24px; border: 1px solid #334155; font-size: 13px; }}
+                .details span {{ display: block; margin-bottom: 6px; color: #cbd5e1; }}
+                .btn {{ display: inline-block; background: #2563eb; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px; }}
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="icon">✓</div>
+                <h1>Officer Access Approved!</h1>
+                <p>You have successfully approved registration for officer <strong>{target_user.username}</strong>.</p>
+                <div class="details">
+                    <span><strong>Officer Username:</strong> {target_user.username}</span>
+                    <span><strong>Email:</strong> {target_user.email}</span>
+                    <span><strong>Station:</strong> {target_user.station}</span>
+                    <span><strong>Badge Number:</strong> {target_user.badge_number}</span>
+                    <span><strong>Status:</strong> <span style="color:#34d399;font-weight:bold;">APPROVED</span></span>
+                </div>
+                <p>The officer can now log into NyayaIQ with their credentials.</p>
+                <a href="/" class="btn">Go to NyayaIQ Portal</a>
+            </div>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=html_code, status_code=200)
+    except Exception as e:
+        return HTMLResponse(content=f"<div style='font-family:sans-serif;padding:40px;color:red;'><h2>Approval Error</h2><p>{str(e)}</p></div>", status_code=400)
+
+@app.get("/api/admin/reject-by-token", response_class=HTMLResponse)
+def reject_user_by_token(token: str, db: Session = Depends(get_db)):
+    try:
+        payload = verify_action_token(token)
+        if payload.get("action") != "reject_user":
+            raise HTTPException(status_code=400, detail="Invalid action token")
+        
+        user_id = payload.get("user_id")
+        target_user = db.query(User).filter(User.id == user_id).first()
+        if not target_user:
+            return HTMLResponse(content="<h2>User not found</h2>", status_code=404)
+        
+        target_user.status = "rejected"
+        db.commit()
+        log_audit(db, "EMAIL_ADMIN", "USER_REJECTED_VIA_EMAIL", f"Officer '{target_user.username}' registration rejected via email link")
+        
+        html_code = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>NyayaIQ - Registration Rejected</title>
+            <style>
+                body {{ font-family: 'Segoe UI', Arial, sans-serif; background-color: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }}
+                .card {{ background: #1e293b; border: 1px solid #334155; padding: 40px; border-radius: 16px; text-align: center; max-width: 480px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }}
+                .icon {{ width: 64px; height: 64px; background: #dc2626; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 32px; margin: 0 auto 20px auto; }}
+                h1 {{ margin: 0 0 10px 0; font-size: 24px; color: #f87171; }}
+                p {{ color: #94a3b8; font-size: 15px; line-height: 1.6; margin-bottom: 24px; }}
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="icon">✕</div>
+                <h1>Registration Rejected</h1>
+                <p>Officer registration request for <strong>{target_user.username}</strong> has been rejected.</p>
+                <p>Account status set to REJECTED.</p>
+            </div>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=html_code, status_code=200)
+    except Exception as e:
+        return HTMLResponse(content=f"<div style='font-family:sans-serif;padding:40px;color:red;'><h2>Rejection Error</h2><p>{str(e)}</p></div>", status_code=400)
+
 
 @app.post("/api/admin/users/{user_id}/toggle-status")
 def toggle_user_status(user_id: int, current_user: User = Depends(get_current_admin), db: Session = Depends(get_db)):

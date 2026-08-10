@@ -29,3 +29,12 @@ CORS_ORIGINS = [
     for origin in os.getenv("CORS_ORIGINS", _default_origins).split(",")
     if origin.strip() and origin.strip() != "*"
 ]
+
+# Email & Admin Approval Config
+ADMIN_NOTIFICATION_EMAIL = os.getenv("ADMIN_NOTIFICATION_EMAIL", "rituchaudhary15077@gmail.com")
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000")
+
