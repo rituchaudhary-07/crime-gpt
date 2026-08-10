@@ -713,6 +713,7 @@ def get_cases(current_user: User = Depends(get_current_user), db: Session = Depe
 
 
 @app.get("/api/cases/archive")
+@app.get("/api/cases/archived")
 def list_archived_cases(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Return only archived records the authenticated user is authorized to see.
 

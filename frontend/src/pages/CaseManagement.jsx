@@ -43,15 +43,22 @@ export default function CaseManagement() {
     loadInProgressRef.current = true;
     setLoading(true);
     setError("");
+
     try {
-      const [activeData, archiveData] = await Promise.all([
-        api.getCases(),
-        api.getArchivedCases()
-      ]);
+      const activePromise = api.getCases().catch(err => {
+        console.error("[CaseManagement] Failed to fetch active cases", { status: err.status, code: err.code, message: err.message });
+        throw err;
+      });
+      const archivePromise = api.getArchivedCases().catch(err => {
+        console.error("[CaseManagement] Failed to fetch archived cases", { status: err.status, code: err.code, message: err.message });
+        throw err;
+      });
+
+      const [activeData, archiveData] = await Promise.all([activePromise, archivePromise]);
       setCases(activeData.filter(c => c.status !== "archived" && c.status !== "closed"));
       setArchivedCases(archiveData);
     } catch (err) {
-      console.error("Case directory load failed:", err);
+      console.error("[CaseManagement] Case directory load failed:", err);
       if (err.status === 401) {
         setError("Your session has expired. Please sign in again.");
       } else if (err.status === 403) {

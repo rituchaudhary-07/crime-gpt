@@ -300,10 +300,11 @@ export const api = {
 
   // Cases
   getCases: async () => {
-    return requestJson(`${API_BASE_URL}/cases`, {
+    const res = await requestJson(`${API_BASE_URL}/cases`, {
       method: "GET",
       headers: getHeaders()
     }, "Unable to load active case files");
+    return Array.isArray(res) ? res : (res?.cases || []);
   },
   
   getCase: async (caseId) => {
@@ -316,10 +317,22 @@ export const api = {
   },
 
   getArchivedCases: async () => {
-    return requestJson(`${API_BASE_URL}/cases/archive`, {
-      method: "GET",
-      headers: getHeaders()
-    }, "Unable to load archived case files");
+    try {
+      const res = await requestJson(`${API_BASE_URL}/cases/archive`, {
+        method: "GET",
+        headers: getHeaders()
+      }, "Unable to load archived case files");
+      return Array.isArray(res) ? res : (res?.cases || []);
+    } catch (err) {
+      if (err.status === 404) {
+        const res = await requestJson(`${API_BASE_URL}/cases/archived`, {
+          method: "GET",
+          headers: getHeaders()
+        }, "Unable to load archived case files");
+        return Array.isArray(res) ? res : (res?.cases || []);
+      }
+      throw err;
+    }
   },
 
   restoreCase: async (caseId) => {
@@ -568,15 +581,6 @@ export const api = {
   getSessionMessages: async (sessionId) => {
     const conversation = await api.getConversation(sessionId);
     return conversation.messages || [];
-  },
-
-  getArchivedCases: async () => {
-    const response = await fetch(`${API_BASE_URL}/cases/archive`, {
-      method: "GET",
-      headers: getHeaders()
-    });
-    if (!response.ok) throw new Error("Failed to fetch archived cases");
-    return response.json();
   },
 
   // General Legal Q&A Assistant Chat
