@@ -238,7 +238,7 @@ export default function CaseManagement() {
       {error && (
         <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
           <AlertCircle className="h-4.5 w-4.5 shrink-0 text-rose-600" />
-          <span>{error}</span>
+          <span>{typeof error === "object" ? (error.message || JSON.stringify(error)) : String(error)}</span>
         </div>
       )}
       {actionSuccess && (

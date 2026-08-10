@@ -697,6 +697,7 @@ def serialize_case(c: Case, db: Session) -> Dict[str, Any]:
         "created_by": c.created_by
     }
 
+@app.get("/cases")
 @app.get("/api/cases")
 def get_cases(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     # Admin sees all active cases, SHO sees station cases, Officer sees own OR assigned cases.
@@ -712,6 +713,8 @@ def get_cases(current_user: User = Depends(get_current_user), db: Session = Depe
     return [serialize_case(c, db) for c in cases]
 
 
+@app.get("/cases/archive")
+@app.get("/cases/archived")
 @app.get("/api/cases/archive")
 @app.get("/api/cases/archived")
 def list_archived_cases(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

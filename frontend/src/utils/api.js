@@ -31,6 +31,18 @@ export class ApiRequestError extends Error {
   }
 }
 
+const formatErrorMessage = (detail, fallbackMessage, status) => {
+  if (!detail) return `${fallbackMessage} (HTTP ${status})`;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail.map(item => item.msg || JSON.stringify(item)).join("; ");
+  }
+  if (typeof detail === "object") {
+    return detail.detail || detail.message || JSON.stringify(detail);
+  }
+  return String(detail);
+};
+
 const requestJson = async (url, options, fallbackMessage) => {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 12000);
@@ -52,8 +64,9 @@ const requestJson = async (url, options, fallbackMessage) => {
           window.location.href = "/login?expired=1";
         }
       }
+      const errStr = formatErrorMessage(payload?.detail, fallbackMessage, response.status);
       throw new ApiRequestError(
-        payload?.detail || `${fallbackMessage} (HTTP ${response.status})`,
+        errStr,
         { status: response.status, code: "http_error", requestId }
       );
     }
