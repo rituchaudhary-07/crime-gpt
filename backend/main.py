@@ -1250,8 +1250,14 @@ def get_conversations(
             else:
                 group = "Older"
                 
-            last_msg = db.query(ChatMessage).filter(ChatMessage.session_id == s.session_id).order_by(ChatMessage.timestamp.desc()).first()
-            last_preview = last_msg.content[:60] + ("..." if len(last_msg.content) > 60 else "") if last_msg else ""
+            last_msg = db.query(ChatMessage).filter(
+                ChatMessage.session_id == s.session_id,
+                ChatMessage.user_id == current_user.id
+            ).order_by(ChatMessage.timestamp.desc()).first()
+            
+            last_preview = ""
+            if last_msg and last_msg.content:
+                last_preview = last_msg.content[:60] + ("..." if len(last_msg.content) > 60 else "")
             
             created_str = s.created_at.isoformat() if (s.created_at and hasattr(s.created_at, 'isoformat')) else str(s.created_at or datetime.utcnow().isoformat())
             updated_str = s.updated_at.isoformat() if (s.updated_at and hasattr(s.updated_at, 'isoformat')) else str(s.updated_at or datetime.utcnow().isoformat())
@@ -1286,7 +1292,7 @@ def create_conversation(
     session = ChatSession(
         session_id=session_id,
         user_id=current_user.id,
-        title=request.title or "New Legal Consultation"
+        title=request.title or "New Inquiry Thread"
     )
     db.add(session)
     db.commit()
@@ -1298,8 +1304,8 @@ def create_conversation(
         "userId": session.user_id,
         "title": session.title,
         "group": "Today",
-        "createdAt": session.created_at.isoformat(),
-        "updatedAt": session.updated_at.isoformat()
+        "createdAt": session.created_at.isoformat() if hasattr(session.created_at, 'isoformat') else str(session.created_at),
+        "updatedAt": session.updated_at.isoformat() if hasattr(session.updated_at, 'isoformat') else str(session.updated_at)
     }
 
 @app.get("/conversations/{conv_id}")
@@ -1311,7 +1317,10 @@ def get_single_conversation(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    session = db.query(ChatSession).filter(ChatSession.session_id == conv_id, ChatSession.user_id == current_user.id).first()
+    session = db.query(ChatSession).filter(
+        ChatSession.session_id == conv_id, 
+        ChatSession.user_id == current_user.id
+    ).first()
     if not session:
         raise HTTPException(status_code=404, detail="Conversation not found")
         
@@ -1360,7 +1369,10 @@ def rename_conversation(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    session = db.query(ChatSession).filter(ChatSession.session_id == conv_id, ChatSession.user_id == current_user.id).first()
+    session = db.query(ChatSession).filter(
+        ChatSession.session_id == conv_id, 
+        ChatSession.user_id == current_user.id
+    ).first()
     if not session:
         raise HTTPException(status_code=404, detail="Conversation not found")
         
@@ -1384,11 +1396,19 @@ def delete_conversation(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    session = db.query(ChatSession).filter(ChatSession.session_id == conv_id, ChatSession.user_id == current_user.id).first()
-    if session:
-        db.query(ChatMessage).filter(ChatMessage.session_id == conv_id).delete()
-        db.delete(session)
-        db.commit()
+    session = db.query(ChatSession).filter(
+        ChatSession.session_id == conv_id, 
+        ChatSession.user_id == current_user.id
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+        
+    db.query(ChatMessage).filter(
+        ChatMessage.session_id == conv_id,
+        ChatMessage.user_id == current_user.id
+    ).delete()
+    db.delete(session)
+    db.commit()
     return {"message": "Conversation deleted successfully"}
 
 @app.post("/conversations/{conv_id}/messages")

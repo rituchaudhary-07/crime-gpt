@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { 
   Send, BookOpen, RefreshCw, X, MessageSquare, 
-  Copy, FileText, Upload, Plus, Trash2, Edit2, Check, 
-  Sparkles, Paperclip, ChevronRight, ShieldAlert, CheckCircle2, Download
+  Copy, Upload, Plus, Trash2, Edit2, Check, 
+  Sparkles, Paperclip, ShieldAlert, Download
 } from "lucide-react";
 import { api } from "../utils/api";
 import Toast from "../components/Toast";
@@ -10,6 +11,9 @@ import AITrustBanner from "../components/ui/AITrustBanner";
 import LegalBadge from "../components/ui/LegalBadge";
 
 export default function AIAssistant() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlConvId = searchParams.get("conversation") || searchParams.get("id");
+
   const [sessions, setSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [historyError, setHistoryError] = useState("");
@@ -29,9 +33,8 @@ export default function AIAssistant() {
   const [activeCitation, setActiveCitation] = useState(null);
   const [copiedIndex, setCopiedIndex] = useState(null);
 
-  // Upload state with AbortController
+  // Upload state
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedFile, setSelectedFile] = useState(null);
   const [toast, setToast] = useState(null);
   const abortControllerRef = useRef(null);
@@ -79,7 +82,7 @@ export default function AIAssistant() {
 
   useEffect(() => {
     loadChatSessions();
-  }, []);
+  }, [urlConvId]);
 
   useEffect(() => {
     if (chatBottomRef.current) {
@@ -95,33 +98,43 @@ export default function AIAssistant() {
       const sessionList = Array.isArray(data) ? data : [];
       setSessions(sessionList);
 
-      const storedSessionId = localStorage.getItem("crimegpt_active_session");
-      const targetSessionId = selectSessionId || storedSessionId;
+      const targetSessionId = selectSessionId || urlConvId || localStorage.getItem("crimegpt_active_session");
 
-      if (targetSessionId && sessionList.some(s => (s.session_id === targetSessionId || s.id === targetSessionId))) {
-        const found = sessionList.find(s => (s.session_id === targetSessionId || s.id === targetSessionId));
-        const validId = found.session_id || found.id;
+      if (targetSessionId && sessionList.some(s => (s.session_id === targetSessionId || s.id === targetSessionId || s._id === targetSessionId))) {
+        const found = sessionList.find(s => (s.session_id === targetSessionId || s.id === targetSessionId || s._id === targetSessionId));
+        const validId = found.session_id || found.id || found._id;
         setActiveSessionId(validId);
+        if (urlConvId !== validId) {
+          setSearchParams({ conversation: validId }, { replace: true });
+        }
+        localStorage.setItem("crimegpt_active_session", validId);
         try {
           await loadSessionMessages(validId);
         } catch (e) {
           console.warn("Failed loading target session messages:", e);
-          localStorage.removeItem("crimegpt_active_session");
           setActiveSessionId(null);
         }
       } else if (sessionList.length > 0) {
-        const firstId = sessionList[0].session_id || sessionList[0].id;
+        const firstId = sessionList[0].session_id || sessionList[0].id || sessionList[0]._id;
         setActiveSessionId(firstId);
+        setSearchParams({ conversation: firstId }, { replace: true });
+        localStorage.setItem("crimegpt_active_session", firstId);
         try {
           await loadSessionMessages(firstId);
         } catch (e) {
           console.warn("Failed loading first session messages:", e);
-          localStorage.removeItem("crimegpt_active_session");
           setActiveSessionId(null);
         }
+      } else {
+        setActiveSessionId(null);
+        setMessages([]);
       }
     } catch (err) {
-      setHistoryError(err.message || "Unable to load chat history.");
+      if (err.status === 401) {
+        setHistoryError("Session expired. Please sign in again.");
+      } else {
+        setHistoryError("Unable to connect to investigation server. Confirm network or server status.");
+      }
     } finally {
       setSessionsLoading(false);
     }
@@ -131,12 +144,12 @@ export default function AIAssistant() {
     setLoading(true);
     try {
       const msgs = await api.getSessionMessages(sessionId);
-      setMessages(msgs);
+      setMessages(msgs || []);
       setActiveSessionId(sessionId);
       localStorage.setItem("crimegpt_active_session", sessionId);
     } catch (err) {
       if (err.status === 404 || err.message?.includes("not found") || err.message?.includes("Not Found")) {
-        setSessions(prev => (Array.isArray(prev) ? prev.filter(s => (s.session_id || s.id) !== sessionId) : []));
+        setSessions(prev => (Array.isArray(prev) ? prev.filter(s => (s.session_id || s.id || s._id) !== sessionId) : []));
         localStorage.removeItem("crimegpt_active_session");
         setActiveSessionId(null);
         setMessages([]);
@@ -148,16 +161,39 @@ export default function AIAssistant() {
     }
   };
 
-  const handleNewChat = () => {
-    setActiveSessionId(null);
-    setMessages([]);
-    localStorage.removeItem("crimegpt_active_session");
-    setToast({ type: "info", message: "Started a new legal inquiry thread." });
+  const handleNewChat = async () => {
+    try {
+      const newSession = await api.createConversation("New Inquiry Thread");
+      const validId = newSession.session_id || newSession.id || newSession._id;
+      setSessions(prev => [newSession, ...prev]);
+      setActiveSessionId(validId);
+      setMessages([]);
+      setSearchParams({ conversation: validId }, { replace: true });
+      localStorage.setItem("crimegpt_active_session", validId);
+      setToast({ type: "info", message: "Created new legal inquiry thread." });
+    } catch (err) {
+      setToast({ type: "error", message: "Failed to create thread: " + err.message });
+    }
   };
 
   const handleSendMessage = async (textToSend) => {
     const query = textToSend || input;
     if (!query.trim()) return;
+
+    let currentSessionId = activeSessionId;
+
+    if (!currentSessionId) {
+      try {
+        const newSession = await api.createConversation("New Inquiry Thread");
+        currentSessionId = newSession.session_id || newSession.id || newSession._id;
+        setSessions(prev => [newSession, ...prev]);
+        setActiveSessionId(currentSessionId);
+        setSearchParams({ conversation: currentSessionId }, { replace: true });
+        localStorage.setItem("crimegpt_active_session", currentSessionId);
+      } catch (err) {
+        console.warn("Auto session creation warning:", err);
+      }
+    }
 
     const userMsg = { 
       role: "user", 
@@ -171,7 +207,7 @@ export default function AIAssistant() {
     setLoading(true);
 
     try {
-      const res = await api.generalChat(query, activeSessionId, assistantMode);
+      const res = await api.sendMessageToConversation(currentSessionId, query, assistantMode);
       const botMsg = { 
         role: "assistant", 
         content: res.response, 
@@ -181,9 +217,10 @@ export default function AIAssistant() {
 
       setMessages(prev => [...prev, botMsg]);
       
-      const newSessionId = res.session_id || res.id;
+      const newSessionId = res.session_id || res.id || currentSessionId;
       if (newSessionId) {
         setActiveSessionId(newSessionId);
+        setSearchParams({ conversation: newSessionId }, { replace: true });
         localStorage.setItem("crimegpt_active_session", newSessionId);
       }
 
@@ -229,7 +266,10 @@ export default function AIAssistant() {
       setDeletingSessionId(sessionId);
       await api.deleteChatSession(sessionId);
       if (activeSessionId === sessionId) {
-        handleNewChat();
+        setActiveSessionId(null);
+        setMessages([]);
+        setSearchParams({}, { replace: true });
+        localStorage.removeItem("crimegpt_active_session");
       }
       const updated = await api.getChatSessions();
       setSessions(updated);
@@ -306,7 +346,7 @@ export default function AIAssistant() {
             className="w-full py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer"
           >
             <Plus className="h-3.5 w-3.5" />
-            <span>New Inquiry Thread</span>
+            <span>+ New Inquiry Thread</span>
           </button>
         </div>
 
@@ -314,18 +354,27 @@ export default function AIAssistant() {
         <div className="flex-1 overflow-y-auto p-2.5 space-y-4 text-xs">
           {sessionsLoading ? (
             <div className="space-y-2 p-2" aria-label="Loading chat history">
-              {[1, 2, 3].map(item => <div key={item} className="h-8 animate-pulse rounded-lg bg-slate-800" />)}
+              {[1, 2, 3, 4].map(item => (
+                <div key={item} className="h-8 animate-pulse rounded-lg bg-slate-800/80" />
+              ))}
             </div>
           ) : historyError ? (
             <div className="p-3 text-center text-xs text-slate-400 space-y-2">
-              <ShieldAlert className="mx-auto h-4 w-4 text-amber-400" />
-              <p className="text-[11px]">{historyError}</p>
-              <button onClick={() => loadChatSessions()} className="text-[10px] font-bold text-blue-400 hover:underline">Retry</button>
+              <ShieldAlert className="mx-auto h-5 w-5 text-amber-400" />
+              <p className="text-[11px] leading-relaxed">{historyError}</p>
+              <button 
+                type="button" 
+                onClick={() => loadChatSessions()} 
+                className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-400 hover:underline cursor-pointer"
+              >
+                <RefreshCw className="h-3 w-3" /> Retry Connection
+              </button>
             </div>
           ) : validSessions.length === 0 ? (
-            <div className="p-4 text-center text-slate-500 text-xs space-y-1">
-              <MessageSquare className="h-5 w-5 mx-auto opacity-40 text-blue-400" />
-              <p className="font-semibold text-slate-400 text-[11px]">No Saved Threads</p>
+            <div className="p-4 text-center text-slate-500 text-xs space-y-2">
+              <MessageSquare className="h-6 w-6 mx-auto opacity-40 text-blue-400" />
+              <p className="font-semibold text-slate-400 text-[11.5px]">No Saved Threads</p>
+              <p className="text-[10px] text-slate-500">Click "+ New Inquiry Thread" above to start an investigation consultation.</p>
             </div>
           ) : (
             Object.entries(groupedSessions).map(([groupLabel, groupList]) => {
@@ -338,14 +387,20 @@ export default function AIAssistant() {
                   
                   <div className="space-y-0.5">
                     {groupList.map(s => {
-                      const sid = s.session_id || s.id;
+                      const sid = s.session_id || s.id || s._id;
                       const isActive = sid === activeSessionId;
                       const isEditing = editingSessionId === sid;
 
                       return (
                         <div
                           key={sid}
-                          onClick={() => { if (!isEditing) loadSessionMessages(sid); }}
+                          onClick={() => { 
+                            if (!isEditing) {
+                              setActiveSessionId(sid);
+                              setSearchParams({ conversation: sid }, { replace: true });
+                              loadSessionMessages(sid);
+                            }
+                          }}
                           className={`group flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all text-xs ${
                             isActive ? 'bg-blue-600/30 text-white border border-blue-500/40 font-bold' : 'text-slate-300 hover:bg-slate-900'
                           }`}
@@ -474,7 +529,7 @@ export default function AIAssistant() {
                   <div className="flex items-center gap-2 mb-1 text-[10px] font-mono text-slate-400">
                     <span className="font-bold text-slate-700">{isUser ? 'INVESTIGATOR' : 'NYAYAIQ COPILOT'}</span>
                     <span>•</span>
-                    <span>{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    <span>{m.timestamp ? new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                   </div>
 
                   <div className={`p-4 rounded-xl text-xs leading-relaxed ${

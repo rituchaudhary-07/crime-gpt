@@ -511,53 +511,43 @@ export const api = {
     }, "Unable to load conversation history");
   },
 
-  createConversation: async (title = "New Legal Consultation") => {
-    const response = await fetch(`${API_BASE_URL}/conversations`, {
+  createConversation: async (title = "New Inquiry Thread") => {
+    return requestJson(`${API_BASE_URL}/conversations`, {
       method: "POST",
       headers: getHeaders(),
       body: JSON.stringify({ title })
-    });
-    if (!response.ok) throw new Error("Failed to create new conversation");
-    return response.json();
+    }, "Failed to create new conversation");
   },
 
   getConversation: async (convId) => {
-    const response = await fetch(`${API_BASE_URL}/conversations/${convId}`, {
+    return requestJson(`${API_BASE_URL}/conversations/${convId}`, {
       method: "GET",
       headers: getHeaders()
-    });
-    if (!response.ok) throw new Error("Failed to fetch conversation details");
-    return response.json();
+    }, "Failed to fetch conversation details");
   },
 
-  sendMessageToConversation: async (convId, message) => {
+  sendMessageToConversation: async (convId, message, mode = "legal_research") => {
     const customKey = localStorage.getItem("gemini_api_key") || "";
-    const response = await fetch(`${API_BASE_URL}/conversations/${convId}/messages`, {
+    return requestJson(`${API_BASE_URL}/conversations/${convId}/messages`, {
       method: "POST",
       headers: getHeaders(),
-      body: JSON.stringify({ message, session_id: convId, custom_key: customKey })
-    });
-    if (!response.ok) throw new Error("Failed to send message to conversation");
-    return response.json();
+      body: JSON.stringify({ message, session_id: convId, mode, custom_key: customKey })
+    }, "Failed to send message to conversation");
   },
 
   renameConversation: async (convId, title) => {
-    const response = await fetch(`${API_BASE_URL}/conversations/${convId}`, {
+    return requestJson(`${API_BASE_URL}/conversations/${convId}`, {
       method: "PATCH",
       headers: getHeaders(),
       body: JSON.stringify({ title })
-    });
-    if (!response.ok) throw new Error("Failed to rename conversation");
-    return response.json();
+    }, "Failed to rename conversation");
   },
 
   deleteConversation: async (convId) => {
-    const response = await fetch(`${API_BASE_URL}/conversations/${convId}`, {
+    return requestJson(`${API_BASE_URL}/conversations/${convId}`, {
       method: "DELETE",
       headers: getHeaders()
-    });
-    if (!response.ok) throw new Error("Failed to delete conversation");
-    return response.json();
+    }, "Failed to delete conversation");
   },
 
   // Legacy Chat Sessions Aliases
@@ -565,33 +555,16 @@ export const api = {
     return api.getConversations();
   },
 
-  createChatSession: async (title = "New Legal Consultation") => {
-    const response = await fetch(`${API_BASE_URL}/conversations`, {
-      method: "POST",
-      headers: getHeaders(),
-      body: JSON.stringify({ title })
-    });
-    if (!response.ok) throw new Error("Failed to create new chat session");
-    return response.json();
+  createChatSession: async (title = "New Inquiry Thread") => {
+    return api.createConversation(title);
   },
 
   renameChatSession: async (sessionId, title) => {
-    const response = await fetch(`${API_BASE_URL}/conversations/${sessionId}`, {
-      method: "PATCH",
-      headers: getHeaders(),
-      body: JSON.stringify({ title })
-    });
-    if (!response.ok) throw new Error("Failed to rename chat session");
-    return response.json();
+    return api.renameConversation(sessionId, title);
   },
 
   deleteChatSession: async (sessionId) => {
-    const response = await fetch(`${API_BASE_URL}/conversations/${sessionId}`, {
-      method: "DELETE",
-      headers: getHeaders()
-    });
-    if (!response.ok) throw new Error("Failed to delete chat session");
-    return response.json();
+    return api.deleteConversation(sessionId);
   },
 
   getSessionMessages: async (sessionId) => {
