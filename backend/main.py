@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from backend.ai_service import AIService
 
-from backend.config import GEMINI_API_KEY, CORS_ORIGINS, APP_BASE_URL, ADMIN_NOTIFICATION_EMAIL
+from backend.config import GEMINI_API_KEY, CORS_ORIGINS, APP_BASE_URL, ADMIN_NOTIFICATION_EMAIL, UPLOAD_DIR
 from backend.database import (
     engine, Base, get_db, init_db, User, Case, Log, 
     FIRDraft, LegalSectionCited, EvidenceItem, ChatMessage,
@@ -51,11 +51,6 @@ init_db()
 
 app = FastAPI(title="NyayaIQ API", version="1.0.0")
 logger = logging.getLogger("crimegpt.api")
-
-# Upload directory setup
-BASE_DIR = Path(__file__).resolve().parent
-UPLOAD_DIR = BASE_DIR / "db" / "uploads"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # Mount Static Files for Uploads
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
