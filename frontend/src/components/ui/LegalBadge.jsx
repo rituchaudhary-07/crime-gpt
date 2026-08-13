@@ -12,7 +12,10 @@ export default function LegalBadge({ act = "BNS", section = "", title = "", conf
     return "bg-slate-50 text-slate-700 border-slate-200";
   };
 
-  const formattedSection = section.toString().replace(/^(section|sec\.?)\s*/i, "");
+  const formattedSection = section
+    .toString()
+    .replace(/^(BNS|BNSS|BSA|IPC|IT\s+Act|IT|Section|Sec\.?|\s+)+/gi, "")
+    .trim();
 
   return (
     <button

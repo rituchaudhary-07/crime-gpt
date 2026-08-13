@@ -1641,20 +1641,22 @@ def general_ai_chat(
         db.commit()
         return {"response": text, "citations": citations_data, "session_id": session_id}
     except Exception as e:
-        fallback_response = f"AI Error: {e}. Matching references:\n{offline_response}"
+        logger.warning("AI completion exception for session %s: %s", session_id, e)
+        clean_fallback = f"**NyayaIQ Legal Intelligence (Offline Mode)**\n\n*Note: Add or update `GEMINI_API_KEY` in server environment variables or Settings for AI synthesis.*\n\nRetrieved Statutory Provisions:\n{matched_text}\n\n*Verify applicable provisions against current official legal sources prior to filing or judicial use.*"
+        
         assistant_msg = ChatMessage(
             user_id=current_user.id,
             case_id=None,
             session_id=session_id,
             message_type="general_assistant",
             role="assistant",
-            content=fallback_response,
+            content=clean_fallback,
             citations=json.dumps(citations_data)
         )
         db.add(assistant_msg)
         active_session.updated_at = datetime.utcnow()
         db.commit()
-        return {"response": fallback_response, "citations": citations_data, "session_id": session_id}
+        return {"response": clean_fallback, "citations": citations_data, "session_id": session_id}
 
 @app.get("/api/chat/history")
 def get_chat_history(
