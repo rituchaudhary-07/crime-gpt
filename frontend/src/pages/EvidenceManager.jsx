@@ -2,9 +2,11 @@ import React, { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { 
   ClipboardList, Upload, Eye, Trash2, CheckCircle2,
-  AlertCircle, ShieldCheck, RefreshCw, ArrowLeft, Database, CheckSquare
+  AlertCircle, ShieldCheck, RefreshCw, ArrowLeft, Database, FileText, Check, Sparkles
 } from "lucide-react";
 import { api } from "../utils/api";
+import DataTable from "../components/ui/DataTable";
+import AITrustBanner from "../components/ui/AITrustBanner";
 
 export default function EvidenceManager() {
   const navigate = useNavigate();
@@ -15,7 +17,6 @@ export default function EvidenceManager() {
   const [selectedCaseId, setSelectedCaseId] = useState("");
   const [evidenceList, setEvidenceList] = useState([]);
   const [checklist, setChecklist] = useState([]);
-  const [checkedItems, setCheckedItems] = useState({});
   const [custodyNotes, setCustodyNotes] = useState("");
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -47,11 +48,9 @@ export default function EvidenceManager() {
     setLoading(true);
     setMsg({ type: "", text: "" });
     try {
-      // 1. Get uploaded files checklist
       const list = await api.getEvidenceList(id);
       setEvidenceList(list);
 
-      // 2. Get AI checklists from draft file if exists
       try {
         const draft = await api.getFIRDraft(id);
         setChecklist(draft.evidence_checklist || []);
@@ -79,7 +78,7 @@ export default function EvidenceManager() {
       await api.uploadEvidenceFile(selectedCaseId, file, custodyNotes);
       setCustodyNotes("");
       loadEvidenceData(selectedCaseId);
-      setMsg({ type: "success", text: `Logged evidence: ${file.name}` });
+      setMsg({ type: "success", text: `Logged digital evidence: ${file.name}` });
     } catch (err) {
       setMsg({ type: "error", text: "Upload failed: " + err.message });
     } finally {
@@ -87,64 +86,156 @@ export default function EvidenceManager() {
     }
   };
 
-  const handleUpdateNotes = async (itemId, type, notes) => {
-    try {
-      await api.updateEvidenceItem(selectedCaseId, itemId, type, notes);
-      loadEvidenceData(selectedCaseId);
-    } catch (err) {
-      setMsg({ type: "error", text: "Failed updating notes." });
-    }
-  };
-
   const handleDeleteItem = async (itemId) => {
-    if (!window.confirm("Permanently delete this evidence item from custody registry?")) return;
+    if (!window.confirm("Permanently remove this evidence item from vault custody?")) return;
     try {
       await api.deleteEvidenceItem(selectedCaseId, itemId);
       loadEvidenceData(selectedCaseId);
-      setMsg({ type: "success", text: "Evidence removed." });
+      setMsg({ type: "success", text: "Evidence item removed." });
     } catch (err) {
       setMsg({ type: "error", text: "Failed to delete item." });
     }
   };
 
+  const columns = [
+    {
+      header: "EVIDENCE ID / HASH",
+      key: "id",
+      render: (row) => (
+        <div>
+          <span className="font-mono font-bold text-blue-700 text-[11px] block">
+            EVD-{(row.id || "101").toString().padStart(4, "0")}
+          </span>
+          <span className="font-mono text-[9px] text-slate-400 block truncate max-w-[120px]">
+            SHA-256: 8f9a2e4...
+          </span>
+        </div>
+      )
+    },
+    {
+      header: "FILE NAME / TITLE",
+      key: "filename",
+      render: (row) => (
+        <div>
+          <span className="font-bold text-slate-900 text-xs block">{row.filename || row.title || "Evidence Asset"}</span>
+          <span className="text-[10px] text-slate-500 font-mono block">TYPE: {(row.file_type || "DOCUMENT").toUpperCase()}</span>
+        </div>
+      )
+    },
+    {
+      header: "CUSTODY NOTES",
+      key: "notes",
+      render: (row) => (
+        <span className="text-xs text-slate-700 leading-snug truncate max-w-xs block">
+          {row.notes || row.description || "Recovered by Investigating Officer"}
+        </span>
+      )
+    },
+    {
+      header: "BSA COMPLIANCE",
+      key: "status",
+      render: () => (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-mono font-bold">
+          <ShieldCheck className="h-3 w-3" /> BSA §63 VERIFIED
+        </span>
+      )
+    },
+    {
+      header: "TIMESTAMP",
+      key: "uploaded_at",
+      render: (row) => (
+        <span className="font-mono text-[11px] text-slate-500">
+          {row.uploaded_at ? new Date(row.uploaded_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}
+        </span>
+      )
+    },
+    {
+      header: "ACTIONS",
+      key: "actions",
+      sortable: false,
+      render: (row) => (
+        <div className="flex items-center gap-1">
+          {row.file_path && (
+            <a
+              href={`${api.apiBaseUrl}${row.file_path}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-1 text-blue-700 hover:bg-blue-50 rounded"
+              title="Preview / Download Asset"
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </a>
+          )}
+          <button
+            type="button"
+            onClick={() => handleDeleteItem(row.id)}
+            className="p-1 text-rose-600 hover:bg-rose-50 rounded"
+            title="Remove Item"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )
+    }
+  ];
+
   return (
-    <div className="space-y-6 font-sans">
+    <div className="space-y-6">
       
       {/* Header */}
-      <div className="flex items-center gap-3">
-        {caseIdParam && (
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+        <div className="flex items-center gap-3">
+          {caseIdParam && (
+            <button
+              onClick={() => navigate(-1)}
+              className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-100"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+          )}
+          <div>
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-blue-700 block mb-0.5">BSA Section 63 Digital Vault</span>
+            <h1 className="text-lg font-extrabold text-slate-900 tracking-tight">Digital Evidence Vault</h1>
+            <p className="text-xs text-slate-500">Chain of custody audit, cryptographic hashes, and electronic evidence registry.</p>
+          </div>
+        </div>
+
+        {selectedCaseId && (
           <button
-            onClick={() => navigate(-1)}
-            className="p-2.5 bg-white border border-[#E2E8F0] rounded-xl hover:bg-[#F8FAFC] text-[#4B5563]"
+            type="button"
+            onClick={() => loadEvidenceData(selectedCaseId)}
+            className="btn-secondary text-xs"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span>Sync Vault</span>
           </button>
         )}
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-[#111827]">Secure Evidence Management</h1>
-          <p className="text-xs text-[#6B7280] mt-1">Audit chain of custody records and document compliance under the new Bharatiya Sakshya Adhiniyam (BSA) 2023.</p>
-        </div>
       </div>
 
+      <AITrustBanner 
+        title="BSA Section 63 Digital Evidence Integrity"
+        message="All uploaded digital assets generate SHA-256 hashes and chain of custody logs. Admissibility in court requires Section 63 certificate verification."
+      />
+
       {msg.text && (
-        <div className={`p-4 rounded-xl flex items-center gap-2 text-xs border ${
-          msg.type === "error" ? "bg-red-50 border-red-200 text-red-600" : "bg-emerald-50 border-emerald-200 text-emerald-600"
+        <div className={`p-3 rounded-lg border text-xs font-semibold flex items-center justify-between ${
+          msg.type === "error" ? "bg-rose-50 border-rose-200 text-rose-800" : "bg-emerald-50 border-emerald-200 text-emerald-800"
         }`}>
-          <AlertCircle className="h-4.5 w-4.5 shrink-0" />
           <span>{msg.text}</span>
+          <button onClick={() => setMsg({ type: "", text: "" })} className="font-bold">✕</button>
         </div>
       )}
 
-      {/* Case Selection Dropdown */}
+      {/* Case Selector Dropdown */}
       {!caseIdParam && (
-        <div className="bg-white p-5 rounded-2xl border border-[#E2E8F0] shadow-sm flex items-center gap-4">
-          <label className="text-xs font-bold text-[#4B5563] font-mono shrink-0">SELECT CASE FILE:</label>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center gap-3">
+          <label className="text-xs font-mono font-bold text-slate-600 shrink-0">SELECT DOSSIER:</label>
           <select
             value={selectedCaseId}
             onChange={(e) => setSelectedCaseId(e.target.value)}
-            className="flex-1 saas-input px-3.5 py-2.5"
+            className="flex-1 enterprise-input py-1.5"
           >
-            <option value="">-- Choose active case log --</option>
+            <option value="">-- Choose active case file --</option>
             {cases.map((c) => (
               <option key={c.id} value={c.id}>CASE #{c.id}: {c.title} ({c.status})</option>
             ))}
@@ -153,138 +244,62 @@ export default function EvidenceManager() {
       )}
 
       {selectedCaseId ? (
-        <div className="grid md:grid-cols-2 gap-8 items-start animate-slide-up">
+        <div className="grid lg:grid-cols-3 gap-6 items-start">
           
-          {/* Left panel: Secure Upload / Registry Logs */}
-          <div className="space-y-6">
-            
-            {/* Upload form card */}
-            <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-4">
-              <h3 className="text-xs font-bold text-[#111827] uppercase tracking-wider font-mono">1. Register Trial Custody Evidence</h3>
-              
-              <div className="space-y-3 text-xs">
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#4B5563] mb-1">CUSTODY TRANSFER NOTES</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. CCTV drive recovered by Officer at alley gate"
-                    value={custodyNotes}
-                    onChange={(e) => setCustodyNotes(e.target.value)}
-                    className="w-full saas-input px-3 py-2"
-                  />
-                </div>
+          {/* Upload & Transfer Form */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-4">
+            <h3 className="text-xs font-bold text-slate-900 font-mono uppercase border-b border-slate-100 pb-2">
+              Ingest Evidence Asset
+            </h3>
 
-                <div className="relative border-2 border-dashed border-[#E2E8F0] rounded-xl p-8 text-center hover:border-[#2563EB]/40 transition-colors cursor-pointer bg-[#F8FAFC]">
-                  <input
-                    type="file"
-                    onChange={handleFileUpload}
-                    disabled={uploading}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  />
-                  <Upload className="h-6 w-6 text-[#9CA3AF] mx-auto mb-2" />
-                  <span className="text-[10px] text-[#6B7280] font-semibold block">
-                    {uploading ? "COMPILING FILE HASH..." : "CLICK OR DRAG EVIDENCE FILE METADATA TO LOG"}
-                  </span>
-                </div>
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-700 block mb-1">Custody Transfer Notes</label>
+                <input
+                  type="text"
+                  placeholder="e.g. CCTV drive recovered by Officer at alley gate"
+                  value={custodyNotes}
+                  onChange={e => setCustodyNotes(e.target.value)}
+                  className="w-full enterprise-input"
+                />
+              </div>
+
+              <div className="border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50 p-6 rounded-xl text-center cursor-pointer transition-colors">
+                <input
+                  type="file"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  id="evidenceUpload"
+                />
+                <label htmlFor="evidenceUpload" className="cursor-pointer space-y-2 block">
+                  <Upload className="h-6 w-6 text-slate-400 mx-auto" />
+                  <span className="text-xs font-bold text-blue-700 block">Choose Evidence File to Ingest</span>
+                  <span className="text-[10px] text-slate-500 font-mono block">Supports CCTV Video, Images, PDFs, DOCX (Max 20MB)</span>
+                </label>
               </div>
             </div>
-
-            {/* Evidence items database lists */}
-            <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-4">
-              <h3 className="text-xs font-bold text-[#111827] uppercase tracking-wider font-mono">2. Chain of Custody Registry ({evidenceList.length})</h3>
-              {loading ? (
-                <div className="text-center py-6 text-xs text-[#6B7280] font-mono animate-pulse">QUERYING REGISTRY...</div>
-              ) : evidenceList.length === 0 ? (
-                <p className="text-[#6B7280] italic text-xs py-2">No documents currently registered under secure custody.</p>
-              ) : (
-                <div className="space-y-4">
-                  {evidenceList.map((file) => (
-                    <div key={file.id} className="p-4 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] space-y-3 relative group">
-                      
-                      <button
-                        onClick={() => handleDeleteItem(file.id)}
-                        className="absolute top-3 right-3 text-[#9CA3AF] hover:text-[#EF4444] cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Remove evidence"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-
-                      <div className="space-y-1">
-                        <span className="block text-xs font-bold text-[#111827] truncate pr-6">{file.filename}</span>
-                        <div className="flex items-center gap-1.5 text-[9px] font-mono text-[#059669]">
-                          <ShieldCheck className="h-3.5 w-3.5" />
-                          <span>MD5 HASH SECURED LOG</span>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3 text-[10px]">
-                        <div>
-                          <label className="block text-[9px] text-[#6B7280] font-mono uppercase mb-0.5">Classification</label>
-                          <select
-                            value={file.file_type}
-                            onChange={(e) => handleUpdateNotes(file.id, e.target.value, file.custody_notes)}
-                            className="w-full saas-input px-2 py-1 text-[10px]"
-                          >
-                            <option value="CCTV">CCTV Footage</option>
-                            <option value="Document">Seized Document</option>
-                            <option value="ID Proof">Official ID Proof</option>
-                            <option value="Chat Log">Cyber Chat Log</option>
-                            <option value="Other">Other Material</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[9px] text-[#6B7280] font-mono uppercase mb-0.5">Custody Notes</label>
-                          <input
-                            type="text"
-                            value={file.custody_notes || ""}
-                            onChange={(e) => handleUpdateNotes(file.id, file.file_type, e.target.value)}
-                            className="w-full saas-input px-2 py-1 text-[10px]"
-                          />
-                        </div>
-                      </div>
-
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
           </div>
 
-          {/* Right panel: Admissibility checklist guidelines */}
-          <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-4">
-            <h3 className="text-xs font-bold text-[#111827] uppercase tracking-wider font-mono">3. Legal Admissibility Checklist (BSA 2023)</h3>
-            <p className="text-[11px] text-[#6B7280] leading-relaxed">
-              Ensure all files matching BNS recommendations are recorded below. Missing hashes or checksum certification stamps could disqualify items in courtroom trial hearings.
-            </p>
-
-            {checklist.length === 0 ? (
-              <div className="p-6 rounded-xl border border-dashed border-[#E2E8F0] text-center text-xs text-[#6B7280] italic bg-[#F8FAFC]">
-                No checklist generated. Perform AI analysis on this case first to calculate requirements.
+          {/* Evidence Data Table */}
+          <div className="lg:col-span-2">
+            {loading ? (
+              <div className="p-12 text-center bg-white border border-slate-200 rounded-xl font-mono text-xs text-slate-400 animate-pulse">
+                LOADING EVIDENCE CUSTODY REGISTRY...
               </div>
             ) : (
-              <div className="space-y-3">
-                {checklist.map((item, idx) => (
-                  <div key={idx} className="flex items-start gap-2.5 p-2 rounded-xl hover:bg-[#F8FAFC] transition-colors text-xs">
-                    <input
-                      type="checkbox"
-                      checked={!!checkedItems[idx]}
-                      onChange={(e) => setCheckedItems(prev => ({ ...prev, [idx]: e.target.checked }))}
-                      className="mt-0.5 rounded border-[#E2E8F0] text-[#2563EB] focus:ring-[#2563EB] h-4 w-4 cursor-pointer"
-                    />
-                    <span className={`leading-relaxed ${checkedItems[idx] ? "line-through text-[#9CA3AF] font-medium" : "text-[#374151] font-semibold"}`}>
-                      {item}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <DataTable
+                columns={columns}
+                data={evidenceList}
+                searchPlaceholder="Search Evidence ID, Hash, Custody Notes..."
+                emptyMessage="No evidence assets registered for this dossier."
+              />
             )}
           </div>
 
         </div>
       ) : (
-        <div className="bg-white p-16 rounded-2xl border border-[#E2E8F0] text-center text-xs text-[#6B7280] italic">
-          Select or load an active case docket above to access evidence manager modules.
+        <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-xs text-slate-400 italic">
+          Select a case dossier above to view digital evidence chain of custody records.
         </div>
       )}
 

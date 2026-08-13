@@ -21,6 +21,9 @@ import Analytics from "./pages/Analytics";
 import SettingsPage from "./pages/Settings";
 import UserProfile from "./pages/UserProfile";
 
+import Sidebar from "./components/layout/Sidebar";
+import TopNav from "./components/layout/TopNav";
+
 // Master Layout Wrapper
 function Layout({ children }) {
   const isAuthenticated = api.isAuthenticated();
@@ -32,7 +35,6 @@ function Layout({ children }) {
   
   // Notification State
   const [notifications, setNotifications] = useState([]);
-  const [showNotifications, setShowNotifications] = useState(false);
   const [showMobileNav, setShowMobileNav] = useState(false);
   const [dismissingIds, setDismissingIds] = useState(new Set());
   const [toastError, setToastError] = useState("");
@@ -131,276 +133,37 @@ function Layout({ children }) {
     }
   };
 
-  const notifList = Array.isArray(notifications) ? notifications : [];
-  const unreadCount = notifList.filter(n => !n.is_read && !n.read).length;
-
-  const navItems = [
-    { name: "Dashboard", path: "/dashboard", icon: <LayoutDashboard className="h-4.5 w-4.5" /> },
-    { name: "New Case", path: "/new-case", icon: <FilePlus className="h-4.5 w-4.5" /> },
-    { name: "Case Management", path: "/cases", icon: <Briefcase className="h-4.5 w-4.5" /> },
-    { name: "AI Assistant", path: "/assistant", icon: <MessageSquareCode className="h-4.5 w-4.5" /> },
-    { name: "FIR Generator", path: "/fir-generator", icon: <FileText className="h-4.5 w-4.5" /> },
-    { name: "Legal Search", path: "/legal-search", icon: <SearchCheck className="h-4.5 w-4.5" /> },
-    { name: "Evidence", path: "/evidence", icon: <ClipboardList className="h-4.5 w-4.5" /> },
-    { name: "Analytics", path: "/analytics", icon: <BarChart3 className="h-4.5 w-4.5" /> },
-    { name: "Settings", path: "/settings", icon: <Settings className="h-4.5 w-4.5" /> }
-  ];
-
   if (!isAuthenticated) {
     return <div className="min-h-screen bg-saas-grid">{children}</div>;
   }
 
-  const roleName = (r) => {
-    if (r === "admin") return "Superintendent / Admin";
-    if (r === "sho") return "Station House Officer";
-    return "Investigating Officer";
-  };
-
-  const todayDate = new Date().toLocaleDateString("en-US", {
-    weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
-  });
-
   return (
-    <div className="flex min-h-screen bg-[#F8FAFC] font-sans">
+    <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900">
       
-      {/* Sidebar Panel */}
-      {showMobileNav && <button aria-label="Close navigation" onClick={() => setShowMobileNav(false)} className="fixed inset-0 z-20 bg-slate-950/30 lg:hidden" />}
-      <aside className={`fixed z-30 flex h-screen w-64 flex-col justify-between border-r border-[#E2E8F0] bg-white transition-transform duration-200 lg:translate-x-0 ${showMobileNav ? "translate-x-0 shadow-2xl" : "-translate-x-full"}`}>
-        <div className="flex flex-col">
-          {/* Logo Brand Header */}
-          <div className="h-16 flex items-center px-6 border-b border-[#F1F5F9] gap-3 cursor-pointer" onClick={() => navigate("/dashboard")}>
-            <div className="h-8 w-8 bg-[#2563EB] rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-sm">
-              NQ
-            </div>
-            <div>
-              <span className="block text-sm font-bold tracking-tight text-[#111827]">
-                Nyaya<span className="text-[#2563EB]">IQ</span>
-              </span>
-              <span className="block text-[9px] font-medium text-[#6B7280] tracking-widest uppercase">
-                AI-POWERED INVESTIGATION &amp; LEGAL INTELLIGENCE
-              </span>
-            </div>
-          </div>
+      {/* Sidebar Navigation */}
+      <Sidebar
+        mobileOpen={showMobileNav}
+        onCloseMobile={() => setShowMobileNav(false)}
+      />
 
-          {/* Navigation Links */}
-          <nav className="p-4 space-y-1">
-            {navItems.map((item) => {
-              const isActive = location.pathname === item.path;
-              return (
-                <Link
-                  key={item.name}
-                  to={item.path}
-                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${
-                    isActive 
-                      ? "bg-[#EFF6FF] text-[#2563EB] font-bold" 
-                      : "text-[#4B5563] hover:text-[#111827] hover:bg-[#F1F5F9]"
-                  }`}
-                >
-                  {item.icon}
-                  <span>{item.name}</span>
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-
-        {/* Profile Card & Logout */}
-        <div className="p-4 border-t border-[#F1F5F9] space-y-3">
-          <div 
-            onClick={() => navigate("/profile")}
-            className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#F8FAFC] cursor-pointer transition-colors border border-transparent hover:border-[#E2E8F0]"
-          >
-            <div className="h-9 w-9 bg-[#EFF6FF] text-[#2563EB] rounded-lg flex items-center justify-center font-bold text-xs">
-              {username ? username.charAt(0).toUpperCase() : "O"}
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <span className="block text-xs font-bold text-[#111827] truncate leading-none">{username}</span>
-              <span className="text-[9px] font-semibold text-[#6B7280] truncate leading-none mt-1 block">
-                {roleName(role)}
-              </span>
-            </div>
-          </div>
-
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold text-[#EF4444] hover:bg-[#FEF2F2] transition-colors cursor-pointer"
-          >
-            <LogOut className="h-4.5 w-4.5" />
-            <span>Sign Out Session</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Right Content Panel */}
-      <div className="flex min-h-screen flex-1 flex-col lg:pl-64">
+      {/* Main Content Area */}
+      <div className="flex min-h-screen flex-1 flex-col lg:pl-60">
         
-        {/* Top Header */}
-        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-[#E2E8F0] bg-white px-4 sm:px-6 lg:px-8">
-          
-          {/* Header Global Search Input */}
-          <div className="flex items-center gap-2">
-            <button onClick={() => setShowMobileNav(true)} aria-label="Open navigation" className="rounded-xl p-2 text-[#475569] transition-colors hover:bg-[#F1F5F9] lg:hidden"><Menu className="h-5 w-5" /></button>
-            <form onSubmit={handleGlobalSearch} className="relative hidden w-80 sm:block">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-[#9CA3AF]">
-              <Search className="h-4 w-4" />
-            </span>
-            <input
-              type="text"
-              placeholder="Search Cases, FIRs, Officers, Sections... (Press Enter)"
-              value={globalQuery}
-              onChange={(e) => setGlobalQuery(e.target.value)}
-              className="w-full saas-input pl-9 pr-4 py-2 text-xs"
-            />
-            </form>
-          </div>
+        {/* Top Operational Header */}
+        <TopNav
+          onOpenMobileNav={() => setShowMobileNav(true)}
+          globalQuery={globalQuery}
+          setGlobalQuery={setGlobalQuery}
+          onGlobalSearch={handleGlobalSearch}
+          notifications={notifications}
+          loadNotifications={loadNotifications}
+          dismissingIds={dismissingIds}
+          handleDismissNotification={handleDismissNotification}
+        />
 
-          {/* Header Actions */}
-          <div className="flex items-center gap-2 sm:gap-5">
-            {/* Calendar widget */}
-            <div className="hidden sm:flex items-center gap-2 text-xs font-semibold text-[#6B7280] bg-[#F8FAFC] border border-[#E2E8F0] px-3.5 py-1.5 rounded-xl">
-              <Calendar className="h-3.5 w-3.5 text-[#9CA3AF]" />
-              <span>{todayDate}</span>
-            </div>
-
-            {/* Notification Bell & Dropdown */}
-            <div className="relative">
-              <button 
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="p-2 rounded-xl text-[#6B7280] hover:text-[#111827] hover:bg-[#F8FAFC] border border-transparent hover:border-[#E2E8F0] transition-all relative cursor-pointer"
-              >
-                <Bell className="h-4 w-4" />
-                {unreadCount > 0 && (
-                  <span className="absolute top-1 right-1 h-4 min-w-4 px-1 rounded-full bg-[#EF4444] text-white text-[9px] font-mono font-bold flex items-center justify-center border-2 border-white">
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
-
-              {/* Notification Popover Dropdown */}
-              {showNotifications && (
-                <>
-                  <div 
-                    className="fixed inset-0 z-40 bg-transparent"
-                    onClick={() => setShowNotifications(false)}
-                  />
-                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl border border-slate-200 shadow-2xl z-50 overflow-hidden animate-slide-down">
-                    <div className="p-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-900 font-mono uppercase">System Alert Notifications</span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={async () => {
-                            try {
-                              await api.markAllNotificationsRead();
-                              loadNotifications();
-                            } catch (err) {
-                              setToastError("Failed to mark notifications as read.");
-                            }
-                          }}
-                          className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
-                        >
-                          Mark All Read
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setShowNotifications(false)}
-                          aria-label="Close notification panel"
-                          title="Close panel"
-                          className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-all cursor-pointer"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                  {toastError && (
-                    <div className="bg-red-50 border-b border-red-100 px-3 py-1.5 text-[10px] font-bold text-red-600 flex items-center justify-between">
-                      <span className="truncate pr-2">{toastError}</span>
-                      <button onClick={() => setToastError("")} className="text-red-400 hover:text-red-600 font-bold shrink-0">✕</button>
-                    </div>
-                  )}
-
-                  <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 text-xs">
-                    {notifList.length === 0 ? (
-                      <div className="p-6 text-center text-slate-400 text-[11px] space-y-1">
-                        <p className="font-bold text-slate-700">No notifications</p>
-                        <p className="text-[10px] text-slate-400">You're all caught up.</p>
-                      </div>
-                    ) : (
-                      notifList.map((n) => {
-                        const isDismissing = dismissingIds.has(n.id);
-                        const isUnread = !n.is_read && !n.read;
-                        return (
-                          <div
-                            key={n.id}
-                            onClick={async () => {
-                              try {
-                                if (isUnread) {
-                                  await api.markNotificationRead(n.id);
-                                  loadNotifications();
-                                }
-                                if (n.link) {
-                                  navigate(n.link);
-                                  setShowNotifications(false);
-                                }
-                              } catch (err) {
-                                console.error("Error handling notification click:", err);
-                              }
-                            }}
-                            className={`group relative p-3.5 hover:bg-slate-50 cursor-pointer transition-colors ${isUnread ? 'bg-blue-50/50' : ''}`}
-                          >
-                            <div className="flex items-start justify-between gap-2 mb-1">
-                              <span className="font-bold text-slate-900 text-[11px] leading-tight pr-2 flex-1">{n.title}</span>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <span className="text-[9px] font-mono text-slate-400">
-                                  {n.created_at ? new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                                </span>
-                                <button
-                                  type="button"
-                                  disabled={isDismissing}
-                                  onClick={(e) => handleDismissNotification(e, n.id)}
-                                  aria-label="Dismiss notification"
-                                  title="Dismiss notification"
-                                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 sm:opacity-0 p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-slate-400"
-                                >
-                                  {isDismissing ? (
-                                    <Loader2 className="h-3 w-3 animate-spin text-slate-500" />
-                                  ) : (
-                                    <X className="h-3 w-3" />
-                                  )}
-                                </button>
-                              </div>
-                            </div>
-                            <p className="text-[11px] text-slate-[#475569] leading-snug">{n.message}</p>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-                </>
-              )}
-            </div>
-
-            {/* Global API State Indicator */}
-            <div className="flex items-center gap-2 text-xs font-semibold text-[#6B7280]">
-              <Globe className="h-4 w-4 text-[#10B981]" />
-              <span className="hidden md:inline font-mono text-[10px]">LOCAL ENGINE ACTIVE</span>
-            </div>
-
-            {/* Header Sign Out Action */}
-            <button 
-              onClick={handleLogout}
-              className="flex items-center gap-1.5 rounded-xl border border-red-100 bg-red-50/40 px-2.5 py-1.5 text-[11px] font-bold text-red-600 transition-colors hover:bg-red-50 sm:px-3.5"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Sign Out</span>
-            </button>
-          </div>
-        </header>
-
-        {/* Content Wrapper */}
+        {/* Page Content Container */}
         <main className="flex-1 bg-saas-grid p-4 sm:p-6 lg:p-8">
-          <div className="animate-slide-up">
+          <div className="animate-fade-in">
             {children}
           </div>
         </main>

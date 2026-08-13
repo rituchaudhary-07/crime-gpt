@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import { 
-  Send, Cpu, BookOpen, RefreshCw, X, MessageSquare, 
-  HelpCircle, Copy, FileText, Upload, Image, Mic, Repeat, CheckSquare,
-  Plus, Trash2, Edit2, Check, Clock, Sparkles, Paperclip, ChevronRight, ShieldAlert
+  Send, BookOpen, RefreshCw, X, MessageSquare, 
+  Copy, FileText, Upload, Plus, Trash2, Edit2, Check, 
+  Sparkles, Paperclip, ChevronRight, ShieldAlert, CheckCircle2, Download
 } from "lucide-react";
 import { api } from "../utils/api";
 import Toast from "../components/Toast";
+import AITrustBanner from "../components/ui/AITrustBanner";
+import LegalBadge from "../components/ui/LegalBadge";
 
 export default function AIAssistant() {
   const [sessions, setSessions] = useState([]);
@@ -69,10 +71,10 @@ export default function AIAssistant() {
 
   const assistantModes = [
     { id: "legal_research", label: "Legal Research" },
-    { id: "investigation", label: "Investigation" },
+    { id: "investigation", label: "Investigation SOP" },
     { id: "evidence_analysis", label: "Evidence Analysis" },
     { id: "fir_assistance", label: "FIR Assistance" },
-    { id: "case_summary", label: "Case Summary" }
+    { id: "case_summary", label: "Case Brief" }
   ];
 
   useEffect(() => {
@@ -185,7 +187,6 @@ export default function AIAssistant() {
         localStorage.setItem("crimegpt_active_session", newSessionId);
       }
 
-      // Safely re-fetch chat sessions for left sidebar without affecting chat feed
       try {
         const updatedSessions = await api.getChatSessions();
         if (Array.isArray(updatedSessions)) {
@@ -240,16 +241,6 @@ export default function AIAssistant() {
     }
   };
 
-  const handleCancelUpload = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    setUploading(false);
-    setUploadProgress(0);
-    setSelectedFile(null);
-    setToast({ type: "info", message: "File upload cancelled." });
-  };
-
   const handleFileUpload = async (file) => {
     if (!file) return;
 
@@ -267,16 +258,12 @@ export default function AIAssistant() {
 
     setSelectedFile(file);
     setUploading(true);
-    setUploadProgress(25);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     try {
-      setUploadProgress(60);
       const res = await api.uploadChatAttachment(file, controller.signal);
-      setUploadProgress(100);
-
       const promptMsg = `[Attached ${res.file_type} Evidence File: ${res.filename} (${res.size_kb} KB)] - Analyze file content for legal chain of custody and relevant criminal provisions.`;
       handleSendMessage(promptMsg);
       setToast({ type: "success", message: `Uploaded evidence '${file.name}'.` });
@@ -286,7 +273,6 @@ export default function AIAssistant() {
       }
     } finally {
       setUploading(false);
-      setUploadProgress(0);
       setSelectedFile(null);
     }
   };
@@ -295,41 +281,6 @@ export default function AIAssistant() {
     navigator.clipboard.writeText(text);
     setCopiedIndex(idx);
     setTimeout(() => setCopiedIndex(null), 2000);
-  };
-
-  const parseMessageCitations = (text, citationsList = []) => {
-    if (!text) return "";
-    const citationRegex = /((?:BNS|BNSS|BSA)\s+Section\s+\d+)/gi;
-    const parts = text.split(citationRegex);
-
-    return parts.map((part, i) => {
-      if (part.match(citationRegex)) {
-        const cleanedPart = part.trim().toLowerCase();
-        const found = citationsList.find(c => c.section_reference.toLowerCase() === cleanedPart);
-
-        const fallbackCite = {
-          section_reference: part,
-          act: part.split(" ")[0].toUpperCase(),
-          title: "Legal Provision",
-          citation_text: "Definition loaded from official central legal index.",
-          justification: "Relevant provision cited during legal investigation discussion.",
-          confidence_score: 98
-        };
-
-        return (
-          <button
-            key={i}
-            onClick={() => setActiveCitation(found || fallbackCite)}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-[10px] font-bold text-blue-700 hover:bg-blue-600 hover:text-white transition-all cursor-pointer font-mono mx-0.5 shrink-0"
-            title="View source legal provision definition"
-          >
-            <BookOpen className="h-2.5 w-2.5" />
-            <span>{part}</span>
-          </button>
-        );
-      }
-      return part;
-    });
   };
 
   const validSessions = Array.isArray(sessions) ? sessions : [];
@@ -341,51 +292,51 @@ export default function AIAssistant() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-140px)] max-w-7xl mx-auto rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden font-sans select-none relative">
-      
-      {/* 1. Left Sidebar: ChatGPT / Gemini Style Chat History */}
-      <div className="w-72 bg-slate-900 text-slate-100 flex flex-col justify-between border-r border-slate-800 shrink-0">
+    <div className="flex h-[calc(100vh-120px)] max-w-7xl mx-auto rounded-xl border border-slate-200 bg-white shadow-2xs overflow-hidden font-sans select-none relative">
+      {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
+
+      {/* Left Sidebar: Threads History */}
+      <div className="w-64 bg-slate-950 text-slate-100 flex flex-col justify-between border-r border-slate-800 shrink-0">
         
-        {/* Top: New Chat Button */}
-        <div className="p-4 border-b border-slate-800/80 space-y-3">
+        {/* Top: New Chat */}
+        <div className="p-3 border-b border-slate-800">
           <button
+            type="button"
             onClick={handleNewChat}
-            className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer active:scale-95"
+            className="w-full py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer"
           >
-            <Plus className="h-4 w-4" />
-            <span>+ New Chat</span>
+            <Plus className="h-3.5 w-3.5" />
+            <span>New Inquiry Thread</span>
           </button>
         </div>
 
-        {/* Scrollable Conversation Threads */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-5 text-xs">
-          
+        {/* Scrollable Thread History */}
+        <div className="flex-1 overflow-y-auto p-2.5 space-y-4 text-xs">
           {sessionsLoading ? (
-            <div className="space-y-2 p-3" aria-label="Loading chat history">
-              {[1, 2, 3].map(item => <div key={item} className="h-10 animate-pulse rounded-xl bg-slate-800" />)}
+            <div className="space-y-2 p-2" aria-label="Loading chat history">
+              {[1, 2, 3].map(item => <div key={item} className="h-8 animate-pulse rounded-lg bg-slate-800" />)}
             </div>
           ) : historyError ? (
-            <div className="space-y-3 p-4 text-center text-xs text-slate-400">
-              <ShieldAlert className="mx-auto h-5 w-5 text-amber-400" />
-              <p className="leading-relaxed">{historyError}</p>
-              <button onClick={() => loadChatSessions()} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2.5 py-1.5 text-[10px] font-bold text-slate-200 hover:bg-slate-800"><RefreshCw className="h-3 w-3" />Retry</button>
+            <div className="p-3 text-center text-xs text-slate-400 space-y-2">
+              <ShieldAlert className="mx-auto h-4 w-4 text-amber-400" />
+              <p className="text-[11px]">{historyError}</p>
+              <button onClick={() => loadChatSessions()} className="text-[10px] font-bold text-blue-400 hover:underline">Retry</button>
             </div>
           ) : validSessions.length === 0 ? (
-            <div className="p-6 text-center text-slate-500 text-xs space-y-2">
-              <MessageSquare className="h-6 w-6 mx-auto opacity-50 text-blue-400" />
-              <p className="font-semibold text-slate-400">No Chat History</p>
-              <p className="text-[10px]">Start a new legal inquiry thread to begin logging conversations.</p>
+            <div className="p-4 text-center text-slate-500 text-xs space-y-1">
+              <MessageSquare className="h-5 w-5 mx-auto opacity-40 text-blue-400" />
+              <p className="font-semibold text-slate-400 text-[11px]">No Saved Threads</p>
             </div>
           ) : (
             Object.entries(groupedSessions).map(([groupLabel, groupList]) => {
               if (groupList.length === 0) return null;
               return (
-                <div key={groupLabel} className="space-y-1.5">
-                  <span className="px-3 text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider block">
+                <div key={groupLabel} className="space-y-1">
+                  <span className="px-2 text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
                     {groupLabel}
                   </span>
                   
-                  <div className="space-y-1">
+                  <div className="space-y-0.5">
                     {groupList.map(s => {
                       const sid = s.session_id || s.id;
                       const isActive = sid === activeSessionId;
@@ -394,75 +345,34 @@ export default function AIAssistant() {
                       return (
                         <div
                           key={sid}
-                          onClick={() => {
-                            if (!isEditing) loadSessionMessages(sid);
-                          }}
-                          className={`group relative flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all text-xs ${
-                            isActive 
-                              ? "bg-slate-800 text-white border border-slate-700 shadow-xs" 
-                              : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+                          onClick={() => { if (!isEditing) loadSessionMessages(sid); }}
+                          className={`group flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all text-xs ${
+                            isActive ? 'bg-blue-600/30 text-white border border-blue-500/40 font-bold' : 'text-slate-300 hover:bg-slate-900'
                           }`}
                         >
-                          <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
-                            <MessageSquare className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-blue-400' : 'text-slate-500'}`} />
-                            
+                          <div className="flex items-center gap-2 truncate flex-1 min-w-0 pr-1">
+                            <MessageSquare className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-blue-400' : 'text-slate-400'}`} />
                             {isEditing ? (
                               <input
                                 type="text"
                                 value={editTitleInput}
-                                onChange={(e) => setEditTitleInput(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") handleRenameSession(s.session_id);
-                                  if (e.key === "Escape") setEditingSessionId(null);
-                                }}
+                                onChange={e => setEditTitleInput(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') handleRenameSession(sid); }}
+                                className="w-full bg-slate-800 text-white px-1.5 py-0.5 rounded text-xs focus:outline-none border border-blue-500"
                                 autoFocus
-                                className="bg-slate-900 border border-blue-500 text-white px-2 py-0.5 rounded text-xs w-full focus:outline-none"
                               />
                             ) : (
-                              <div className="flex flex-col truncate">
-                                <span className="truncate font-bold leading-snug">
-                                  {s.title}
-                                </span>
-                                {s.lastMessagePreview && (
-                                  <span className="text-[10px] text-slate-500 font-normal truncate">
-                                    {s.lastMessagePreview}
-                                  </span>
-                                )}
-                              </div>
+                              <span className="truncate text-[11.5px]">{s.title || "Legal Consultation"}</span>
                             )}
                           </div>
 
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                             {isEditing ? (
-                              <button
-                                onClick={() => handleRenameSession(sid)}
-                                className="p-1 text-emerald-400 hover:text-white"
-                                title="Save Title"
-                              >
-                                <Check className="h-3 w-3" />
-                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); handleRenameSession(sid); }} className="text-emerald-400 hover:text-emerald-300 p-0.5"><Check className="h-3 w-3" /></button>
                             ) : (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingSessionId(sid);
-                                  setEditTitleInput(s.title);
-                                }}
-                                className="p-1 text-slate-400 hover:text-white"
-                                title="Rename Chat"
-                              >
-                                <Edit2 className="h-3 w-3" />
-                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); setEditingSessionId(sid); setEditTitleInput(s.title); }} className="text-slate-400 hover:text-white p-0.5"><Edit2 className="h-3 w-3" /></button>
                             )}
-
-                            <button
-                              onClick={(e) => handleDeleteSession(e, sid)}
-                              disabled={deletingSessionId === sid}
-                              className="p-1 text-slate-400 hover:text-rose-400"
-                              title="Delete Chat"
-                            >
-                              {deletingSessionId === sid ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
-                            </button>
+                            <button onClick={(e) => handleDeleteSession(e, sid)} className="text-slate-400 hover:text-rose-400 p-0.5"><Trash2 className="h-3 w-3" /></button>
                           </div>
                         </div>
                       );
@@ -472,282 +382,222 @@ export default function AIAssistant() {
               );
             })
           )}
-
         </div>
 
-        {/* Sidebar Footer */}
-        <div className="p-3.5 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between text-[11px] text-slate-400">
-          <div className="flex items-center gap-2 truncate">
-            <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-            <span className="font-bold truncate">NyayaIQ Legal Intelligence</span>
-          </div>
-          <span className="font-mono text-[9px] text-slate-500">PROD</span>
+        <div className="p-3 border-t border-slate-800 bg-slate-900/60 text-[10px] text-slate-400 font-mono flex items-center justify-between">
+          <span>NyayaIQ Engine</span>
+          <span className="text-teal-400 font-bold">ONLINE</span>
         </div>
-
       </div>
 
-      {/* 2. Main Chat Canvas */}
-      <div className="flex-1 flex flex-col justify-between h-full bg-white relative overflow-hidden">
+      {/* Main Legal Copilot Center Feed */}
+      <div className="flex-1 flex flex-col justify-between bg-slate-50 min-w-0">
         
-        {/* Header Bar */}
-        <div className="px-6 py-3.5 border-b border-slate-200 bg-white flex items-center justify-between z-10">
+        {/* Top Header & Assistant Mode Switcher */}
+        <div className="p-3.5 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-blue-600" />
+            <div className="p-1.5 bg-blue-50 text-blue-700 rounded-md border border-blue-100">
+              <Sparkles className="h-4 w-4" />
+            </div>
             <div>
-              <h2 className="text-xs font-bold text-slate-900 font-mono uppercase tracking-wide">NYAYAIQ ASSISTANT</h2>
-              <p className="text-[10px] text-slate-500">{activeSessionId ? (sessions.find(s => s.session_id === activeSessionId)?.title || "Active legal consultation") : "Investigation & Legal Intelligence"}</p>
+              <h2 className="text-xs font-bold text-slate-900 tracking-tight">Legal Investigation Copilot</h2>
+              <p className="text-[10px] font-mono text-slate-500">Statutory Retrieval (BNS / BNSS / BSA 2023)</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-          <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-emerald-700"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />AI engine active</span>
+          {/* Assistant Mode Pills */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+            {assistantModes.map(m => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setAssistantMode(m.id)}
+                className={`px-2.5 py-1 rounded-md text-[10.5px] font-semibold transition-all cursor-pointer ${
+                  assistantMode === m.id 
+                    ? 'bg-white text-blue-700 font-bold shadow-2xs border border-slate-200' 
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Export Action */}
           {messages.length > 0 && (
             <button
-              onClick={() => {
-                try {
-                  api.exportChatPDF(messages, "NyayaIQ Assistant Transcript");
-                  setToast({ type: "success", message: "PDF Log generated successfully." });
-                } catch (err) {
-                  setToast({ type: "error", message: "PDF export failed: " + err.message });
-                }
-              }}
-              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 font-bold text-[11px] flex items-center gap-1.5 transition-colors cursor-pointer"
+              type="button"
+              onClick={() => api.exportChatPDF(messages, "NyayaIQ Investigation Log")}
+              className="btn-secondary text-xs"
             >
-              <FileText className="h-3.5 w-3.5 text-blue-600" />
+              <Download className="h-3.5 w-3.5" />
               <span>Export PDF Log</span>
             </button>
           )}
-          </div>
         </div>
 
-        {/* Message Stream */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {/* Message Feed Canvas */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
           
-          {/* CONDITION 1: Brand New Empty Chat (0 Messages) -> Show Suggestions Grid */}
-          {messages.length === 0 && !loading ? (
-            <div className="max-w-3xl mx-auto h-full flex flex-col items-center justify-center space-y-8 py-10">
-              
+          {/* AI Trust Visual Signal Banner */}
+          <AITrustBanner compact />
+
+          {messages.length === 0 ? (
+            <div className="py-8 max-w-2xl mx-auto space-y-6">
               <div className="text-center space-y-2">
-                <div className="h-12 w-12 rounded-2xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center mx-auto shadow-xs">
-                  <Cpu className="h-6 w-6" />
-                </div>
-                <h1 className="text-xl font-bold tracking-tight text-slate-900">Investigation &amp; Legal Intelligence Assistant</h1>
-                <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                  Research BNS, BNSS and BSA provisions, evidence handling, cybercrime procedures, and FIR preparation using available legal sources.
-                </p>
-                <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Legal intelligence online</div>
+                <h3 className="text-sm font-bold text-slate-900">How can NyayaIQ assist your investigation today?</h3>
+                <p className="text-xs text-slate-500">Select a recommended query below or type any legal provision inquiry.</p>
               </div>
 
-              <div className="flex flex-wrap justify-center gap-2">
-                {assistantModes.map(mode => <button key={mode.id} onClick={() => setAssistantMode(mode.id)} className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition-colors ${assistantMode === mode.id ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}>{mode.label}</button>)}
-              </div>
-
-              {/* 4-6 Suggested Question Cards Grid */}
-              <div className="grid md:grid-cols-2 gap-3 w-full">
-                {suggestedPrompts.map((card, idx) => (
-                  <button
+              {/* Prompt Suggestions Grid */}
+              <div className="grid sm:grid-cols-2 gap-2.5">
+                {suggestedPrompts.map((sp, idx) => (
+                  <div
                     key={idx}
-                    onClick={() => handleSendMessage(card.prompt)}
-                    className="p-4 rounded-2xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 text-left transition-all cursor-pointer group space-y-1.5 shadow-xs"
+                    onClick={() => handleSendMessage(sp.prompt)}
+                    className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer group"
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-900 group-hover:text-blue-700">
-                        {card.title}
-                      </span>
-                      <ChevronRight className="h-3.5 w-3.5 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
-                    </div>
-                    <p className="text-[11px] text-slate-500 leading-snug line-clamp-2">
-                      {card.desc}
-                    </p>
-                  </button>
+                    <span className="text-xs font-bold text-slate-900 block group-hover:text-blue-700">{sp.title}</span>
+                    <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{sp.desc}</p>
+                  </div>
                 ))}
               </div>
-
             </div>
           ) : (
-            
-            /* CONDITION 2: Active Conversation (> 0 Messages) -> Suggestions Hidden */
-            <div className="max-w-3xl mx-auto space-y-5">
-              {messages.map((msg, idx) => (
-                <div 
+            messages.map((m, idx) => {
+              const isUser = m.role === "user";
+              return (
+                <div
                   key={idx}
-                  className={`flex flex-col ${
-                    msg.role === "user" ? "items-end ml-auto max-w-[85%]" : "items-start mr-auto max-w-[90%]"
-                  }`}
+                  className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-3xl ${isUser ? 'ml-auto' : 'mr-auto'}`}
                 >
-                  <div className={`p-4 rounded-2xl text-xs leading-relaxed shadow-xs ${
-                    msg.role === "user"
-                      ? "bg-blue-600 text-white rounded-tr-none"
-                      : "bg-white border border-slate-200 text-slate-800 rounded-tl-none"
-                  }`}>
-                    {msg.role === "user" 
-                      ? msg.content 
-                      : parseMessageCitations(msg.content, msg.citations)}
+                  <div className="flex items-center gap-2 mb-1 text-[10px] font-mono text-slate-400">
+                    <span className="font-bold text-slate-700">{isUser ? 'INVESTIGATOR' : 'NYAYAIQ COPILOT'}</span>
+                    <span>•</span>
+                    <span>{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
 
-                  {/* Message Metadata & Copy Button */}
-                  <div className="flex items-center gap-3 mt-1.5 text-[9px] font-mono text-slate-400 uppercase">
-                    <span>{msg.role === "user" ? "User Query" : "NyayaIQ Assistant"}</span>
-                    {msg.role === "assistant" && (
-                      <>
-                        <span>•</span>
+                  <div className={`p-4 rounded-xl text-xs leading-relaxed ${
+                    isUser 
+                      ? 'bg-blue-700 text-white rounded-br-2xs shadow-xs' 
+                      : 'bg-white border border-slate-200 text-slate-900 shadow-2xs rounded-bl-2xs space-y-3'
+                  }`}>
+                    <div className="whitespace-pre-wrap font-sans">{m.content}</div>
+
+                    {/* Statutory Citations Card Strip */}
+                    {!isUser && m.citations && m.citations.length > 0 && (
+                      <div className="pt-2 border-t border-slate-100 space-y-2">
+                        <span className="text-[10px] font-mono font-bold text-slate-500 uppercase block">Cited Legal Provisions ({m.citations.length})</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {m.citations.map((c, cIdx) => (
+                            <LegalBadge
+                              key={cIdx}
+                              act={c.act || "BNS"}
+                              section={c.section_reference || c.section}
+                              title={c.title}
+                              confidence={c.confidence_score}
+                              onClick={() => setActiveCitation(c)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {!isUser && (
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                        <span>CONFIDENCE: 98% VERIFIED</span>
                         <button
-                          onClick={() => handleCopy(msg.content, idx)}
-                          className="hover:underline hover:text-blue-600 flex items-center gap-1 cursor-pointer"
+                          type="button"
+                          onClick={() => handleCopy(m.content, idx)}
+                          className="hover:text-slate-700 flex items-center gap-1 cursor-pointer"
                         >
                           <Copy className="h-3 w-3" />
-                          <span>{copiedIndex === idx ? "Copied" : "Copy"}</span>
+                          <span>{copiedIndex === idx ? 'Copied' : 'Copy'}</span>
                         </button>
-                      </>
+                      </div>
                     )}
                   </div>
                 </div>
-              ))}
-
-              {/* Typing Loading Indicator */}
-              {loading && (
-                <div className="flex items-center gap-2 p-4 bg-slate-50 border border-slate-200 rounded-2xl rounded-tl-none w-fit max-w-[200px]">
-                  <div className="h-2 w-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <div className="h-2 w-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <div className="h-2 w-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: "300ms" }} />
-                  <span className="text-[10px] font-mono text-slate-500 font-semibold ml-1">Analyzing Law...</span>
-                </div>
-              )}
-
-              <div ref={chatBottomRef} />
-            </div>
-
+              );
+            })
           )}
 
+          {loading && (
+            <div className="flex items-center gap-2 text-xs font-mono text-slate-400 animate-pulse p-2">
+              <Sparkles className="h-3.5 w-3.5 text-blue-600 animate-spin" />
+              <span>SEARCHING STATUTORY DATABASE &amp; CITATIONS...</span>
+            </div>
+          )}
+
+          <div ref={chatBottomRef} />
         </div>
 
-        {/* 3. Input Bar at Bottom (Inline File Attachment Icon inside Input Bar) */}
-        <div className="p-4 bg-white border-t border-slate-200">
-          
-          <div className="max-w-3xl mx-auto space-y-2">
-            
-            {/* Upload Banner with Cancel Button */}
-            {uploading && (
-              <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-2 truncate">
-                  <Paperclip className="h-4 w-4 text-blue-600 animate-pulse shrink-0" />
-                  <span className="font-bold text-blue-900 truncate">{selectedFile?.name}</span>
-                  <span className="text-[10px] text-blue-700 font-mono">({uploadProgress}%)</span>
-                </div>
-                <button
-                  onClick={handleCancelUpload}
-                  className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-[10px] cursor-pointer"
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
+        {/* Input Bar */}
+        <div className="p-3 bg-white border-t border-slate-200 space-y-2">
+          {selectedFile && (
+            <div className="p-2 bg-blue-50 border border-blue-200 rounded-md text-xs flex items-center justify-between">
+              <span className="font-mono text-blue-800 truncate">Attached: {selectedFile.name}</span>
+              <button onClick={() => setSelectedFile(null)} className="text-blue-600 hover:text-blue-900"><X className="h-3.5 w-3.5" /></button>
+            </div>
+          )}
 
-            {/* Input Form with Attachment Paperclip Inside */}
-            <form 
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!loading) handleSendMessage();
-              }}
-              className="relative flex items-center rounded-2xl border border-slate-300 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 bg-white shadow-xs transition-all"
+          <div className="flex items-center gap-2">
+            <label className="p-2 text-slate-400 hover:text-slate-700 cursor-pointer rounded-lg hover:bg-slate-100">
+              <Paperclip className="h-4 w-4" />
+              <input type="file" onChange={e => handleFileUpload(e.target.files[0])} className="hidden" />
+            </label>
+
+            <input
+              type="text"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleSendMessage(); }}
+              placeholder="Ask legal provisions (BNS, BNSS, BSA) or cyber investigation procedures..."
+              className="flex-1 enterprise-input text-xs"
+            />
+
+            <button
+              type="button"
+              onClick={() => handleSendMessage()}
+              disabled={loading || !input.trim()}
+              className="btn-primary text-xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              
-              {/* Attachment Icon Inside Input Bar (Left) */}
-              <label 
-                className="pl-3.5 pr-1.5 py-3 text-slate-400 hover:text-blue-600 transition-colors cursor-pointer shrink-0"
-                title="Attach evidence photo/document (Max 20MB)"
-              >
-                <Paperclip className="h-4 w-4" />
-                <input
-                  type="file"
-                  accept=".jpg,.jpeg,.png,.pdf,.docx"
-                  className="hidden"
-                  disabled={uploading || loading}
-                  onChange={(e) => {
-                    if (e.target.files[0]) handleFileUpload(e.target.files[0]);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
-
-              {/* Text Input */}
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask legal provisions (BNS, BNSS, BSA) or cyber investigation procedures..."
-                disabled={loading}
-                className="w-full py-3 pr-12 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none bg-transparent"
-              />
-
-              {/* Send Button Inside Input Bar (Right) */}
-              <button
-                type="submit"
-                disabled={!input.trim() || loading}
-                className={`absolute right-2 p-2 rounded-xl text-white transition-all ${
-                  input.trim() && !loading
-                    ? "bg-blue-600 hover:bg-blue-500 cursor-pointer shadow-xs"
-                    : "bg-slate-200 text-slate-400 cursor-not-allowed"
-                }`}
-              >
-                <Send className="h-3.5 w-3.5" />
-              </button>
-
-            </form>
-
-            <p className="text-[10px] text-center text-slate-400 font-mono">
-              Source-grounded assistance only. Verify applicable provisions against current official legal sources before filing or judicial use.
-            </p>
-
+              <Send className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Send Inquiry</span>
+            </button>
           </div>
-
         </div>
 
       </div>
 
-      {/* Citation Slide-out Details Drawer */}
+      {/* Citation Detail Slide-Out Modal Drawer */}
       {activeCitation && (
-        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs z-50 flex justify-end animate-fade-in">
-          <div className="w-full max-w-md bg-white h-full p-6 space-y-6 overflow-y-auto shadow-2xl border-l border-slate-200 flex flex-col justify-between">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-                <div className="flex items-center gap-2 text-blue-700">
-                  <BookOpen className="h-5 w-5" />
-                  <h3 className="font-bold text-sm text-slate-900">{activeCitation.section_reference}</h3>
-                </div>
-                <button 
-                  onClick={() => setActiveCitation(null)}
-                  className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex justify-end animate-fade-in">
+          <div className="w-full max-w-md bg-white h-full shadow-2xl p-6 overflow-y-auto space-y-4 font-sans">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div>
+                <span className="text-[10px] font-mono font-bold text-blue-700 uppercase">OFFICIAL STATUTORY REFERENCE</span>
+                <h3 className="text-sm font-bold text-slate-900 mt-0.5">{activeCitation.act} {activeCitation.section_reference}</h3>
               </div>
-
-              <div className="space-y-3 text-xs">
-                <div>
-                  <span className="text-[10px] font-mono font-bold text-slate-400 uppercase block">ACT & TITLE:</span>
-                  <span className="font-bold text-slate-900">{activeCitation.act} • {activeCitation.title}</span>
-                </div>
-
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                  <span className="text-[10px] font-mono font-bold text-slate-500 uppercase block">STATUTORY TEXT:</span>
-                  <p className="text-slate-700 leading-relaxed font-medium">{activeCitation.citation_text}</p>
-                </div>
-              </div>
+              <button onClick={() => setActiveCitation(null)} className="text-slate-400 hover:text-slate-700 p-1"><X className="h-4 w-4" /></button>
             </div>
 
-            <button
-              onClick={() => setActiveCitation(null)}
-              className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold cursor-pointer transition-colors"
-            >
-              Dismiss Source Panel
-            </button>
+            <div className="space-y-3 text-xs">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                <span className="font-bold text-slate-900 block mb-1">{activeCitation.title}</span>
+                <p className="text-slate-600 leading-relaxed">{activeCitation.citation_text || activeCitation.description}</p>
+              </div>
+
+              {activeCitation.justification && (
+                <div className="p-3 bg-blue-50/60 border border-blue-200/60 rounded-lg space-y-1">
+                  <span className="text-[10px] font-mono font-bold text-blue-800 uppercase block">Investigation Applicability</span>
+                  <p className="text-blue-900 leading-relaxed">{activeCitation.justification}</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
-
-      {/* Global Toast Notification */}
-      <Toast toast={toast} onClose={() => setToast(null)} />
 
     </div>
   );

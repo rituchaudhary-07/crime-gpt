@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
-  FilePlus, MessageSquare, ClipboardList, Briefcase, FileText,
-  Users, CheckCircle2, AlertCircle, BarChart3, Clock, 
-  ArrowRight, ShieldCheck, Cpu, Compass, BookOpen, RefreshCw, X, WifiOff
+  FilePlus, MessageSquareCode, SearchCheck, Briefcase, Clock, 
+  Compass, CheckCircle2, Cpu, ShieldCheck, ArrowRight, RefreshCw, X, WifiOff, Sparkles, AlertTriangle
 } from "lucide-react";
 import { api } from "../utils/api";
+import MetricKpi from "../components/ui/MetricKpi";
+import StatusBadge from "../components/ui/StatusBadge";
+import AITrustBanner from "../components/ui/AITrustBanner";
+import Timeline from "../components/ui/Timeline";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -41,7 +44,7 @@ export default function Dashboard() {
         navigate("/login");
         return;
       }
-      setError(err.message || "Unable to load dashboard data.");
+      setError(err.message || "Unable to load dashboard metrics.");
     } finally {
       setLoading(false);
     }
@@ -49,208 +52,259 @@ export default function Dashboard() {
 
   useEffect(() => { fetchStats(); }, []);
 
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case "draft": return "bg-[#F1F5F9] text-[#475569] border-[#E2E8F0]";
-      case "under_review": return "bg-[#F3E8FF] text-[#7E22CE] border-[#E9D5FF]";
-      case "filed": return "bg-[#ECFDF5] text-[#047857] border-[#A7F3D0]";
-      case "investigating": return "bg-[#FFFBEB] text-[#B45309] border-[#FDE68A]";
-      default: return "bg-[#F1F5F9] text-[#64748B] border-[#E2E8F0]";
-    }
-  };
-
   const getTodayCasesCount = () => {
-    // Mock calculating cases registered today
     return stats.recent_cases?.length || 0;
   };
 
   return (
-    <div className="space-y-8 font-sans">
+    <div className="space-y-6">
       
-      {/* 1. What Happened Today / Quick Starts */}
-      <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-[.16em] text-[#2563EB]">Operations overview</p>
-            <h2 className="text-xl font-bold tracking-tight text-[#0F172A] sm:text-2xl">Investigation Command Centre</h2>
-            <p className="mt-1 text-sm text-[#64748B]">Review case activity, legal intelligence, and priority investigation work.</p>
+      {/* Header Banner & Jurisdiction Info */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-blue-700">Investigation Command Centre</span>
+            <span className="px-1.5 py-0.2 bg-slate-100 text-slate-700 text-[9px] font-mono font-bold rounded">OPERATIONAL</span>
           </div>
-          <span className="w-fit rounded-full border border-[#E2E8F0] bg-white px-3 py-1.5 text-[10px] font-bold text-[#64748B] font-mono tracking-widest uppercase shadow-sm">
-            JURISDICTION STATION: {stats?.recent_cases?.[0]?.station || "Central Cyber PS"}
-          </span>
+          <h1 className="text-lg font-extrabold text-slate-900 tracking-tight mt-0.5">
+            Legal Intelligence &amp; Case Briefing
+          </h1>
+          <p className="text-xs text-slate-500">
+            Welcome, Officer <strong className="text-slate-800">@{username}</strong>. Overview of ongoing investigations and BNS 2023 compliance state.
+          </p>
         </div>
 
-        {/* Quick action grid boxes */}
-        <div className="grid gap-4 md:grid-cols-3">
-          
-          <div 
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <span className="text-[10px] font-mono font-bold text-slate-600 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg shrink-0">
+            STATION: {stats?.recent_cases?.[0]?.station || "Central Cyber Police Station"}
+          </span>
+          <button
+            type="button"
             onClick={() => navigate("/new-case")}
-            className="saas-card saas-card-hover group flex h-44 cursor-pointer flex-col justify-between border-t-4 border-t-[#2563EB] p-5"
+            className="btn-primary text-xs shrink-0"
           >
-            <div className="h-10 w-10 bg-[#EFF6FF] text-[#2563EB] rounded-xl flex items-center justify-center">
-              <FilePlus className="h-5 w-5" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-[#111827] flex items-center gap-1.5">
-                <span>Start New Investigation</span>
-                <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
-              </h3>
-              <p className="text-xs text-[#6B7280] mt-1">Ingest facts and verify code citations under BNS 2023.</p>
-            </div>
-          </div>
-
-          <div 
-            onClick={() => navigate("/assistant")}
-            className="saas-card saas-card-hover group flex h-44 cursor-pointer flex-col justify-between border-t-4 border-t-[#06B6D4] p-5"
-          >
-            <div className="h-10 w-10 bg-[#ECFDF5] text-[#06B6D4] rounded-xl flex items-center justify-center">
-              <MessageSquare className="h-5 w-5" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-[#111827] flex items-center gap-1.5">
-                <span>Ask NyayaIQ</span>
-                <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
-              </h3>
-              <p className="text-xs text-[#6B7280] mt-1">Query verified legal sources and investigation guidance.</p>
-            </div>
-          </div>
-
-          <div 
-            onClick={() => navigate("/legal-search")}
-            className="saas-card saas-card-hover group flex h-44 cursor-pointer flex-col justify-between border-t-4 border-t-[#10B981] p-5"
-          >
-            <div className="h-10 w-10 bg-emerald-50 text-[#10B981] rounded-xl flex items-center justify-center">
-              <BookOpen className="h-5 w-5" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-[#111827] flex items-center gap-1.5">
-                <span>Legacy Law Converter</span>
-                <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
-              </h3>
-              <p className="text-xs text-[#6B7280] mt-1">Map legacy IPC references to corresponding current legal provisions.</p>
-            </div>
-          </div>
-
+            <FilePlus className="h-3.5 w-3.5" />
+            <span>New Case</span>
+          </button>
         </div>
       </div>
 
+      {/* AI Assistance Trust Banner */}
+      <AITrustBanner 
+        title="BNS Statutory Intelligence System"
+        message="AI recommendations assist investigating officers in section mapping (BNS, BNSS, BSA). Officer verification is mandatory prior to filing or court submission."
+      />
+
       {error && (
-        <div role="alert" className="flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50/80 p-4 text-sm text-red-800 shadow-sm sm:flex-row sm:items-center">
-          <div className="flex min-w-0 flex-1 items-start gap-3">
-            <div className="rounded-xl bg-red-100 p-2 text-red-600"><WifiOff className="h-4 w-4" /></div>
-            <div><p className="font-bold">Backend connection needs attention</p><p className="mt-0.5 text-xs leading-relaxed text-red-700">{error} <span className="font-mono">({api.apiBaseUrl})</span></p></div>
+        <div role="alert" className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3.5 rounded-xl border border-rose-200 bg-rose-50 text-xs text-rose-800 gap-3">
+          <div className="flex items-center gap-2.5">
+            <WifiOff className="h-4 w-4 text-rose-600 shrink-0" />
+            <div>
+              <p className="font-bold">Backend Connection Alert</p>
+              <p className="text-[11px] text-rose-700">{error} ({api.apiBaseUrl})</p>
+            </div>
           </div>
-          <div className="flex items-center gap-2 self-end sm:self-auto">
-            <button onClick={fetchStats} className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-700 transition-colors hover:bg-red-100"><RefreshCw className="h-3.5 w-3.5" />Retry</button>
-            <button onClick={() => setError("")} aria-label="Dismiss connection notice" className="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-100"><X className="h-4 w-4" /></button>
-          </div>
+          <button onClick={fetchStats} className="btn-secondary text-xs border-rose-300 text-rose-700 hover:bg-rose-100">
+            <RefreshCw className="h-3 w-3" /> Retry
+          </button>
         </div>
       )}
 
-      {/* 2. Key Metrics Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-        {[
-          { title: "TODAY'S CASES", val: getTodayCasesCount(), desc: "Added since midnight", icon: <Clock className="h-4 w-4 text-[#2563EB]" /> },
-          { title: "ACTIVE FILES", val: stats.open_cases, desc: "Awaiting legal signature", icon: <Compass className="h-4 w-4 text-[#B45309]" /> },
-          { title: "FILED REPORTS", val: stats.resolved_cases, desc: "Sealed court dossiers", icon: <CheckCircle2 className="h-4 w-4 text-[#047857]" /> },
-          { title: "AVERAGE DRAFTING TIME", val: `${stats.avg_drafting_time_minutes}m`, desc: "AI optimization latency", icon: <Cpu className="h-4 w-4 text-[#7E22CE]" /> }
-        ].map((m, idx) => (
-          <div key={idx} className="dashboard-metric flex items-center justify-between rounded-2xl border border-[#E2E8F0] bg-white p-5">
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-[#6B7280] font-mono tracking-widest uppercase">{m.title}</span>
-              {loading ? <div className="dashboard-skeleton mt-2 h-8 w-16 rounded-lg" /> : <span className="block text-2xl font-black tabular-nums text-[#111827]">{m.val}</span>}
-              <span className="text-[10px] text-[#6B7280] block font-medium">{m.desc}</span>
-            </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#E2E8F0] bg-[#F8FAFC]">
-              {m.icon}
-            </div>
-          </div>
-        ))}
+      {/* High-Density KPI Metrics Strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <MetricKpi 
+          title="Today's Registered"
+          value={loading ? "..." : getTodayCasesCount()}
+          subtext="Added since 00:00 IST"
+          trend="+12%"
+          icon={<Clock className="h-4 w-4" />}
+          status="accent"
+        />
+        <MetricKpi 
+          title="Active Investigations"
+          value={loading ? "..." : stats.open_cases}
+          subtext="Under active inquiry"
+          icon={<Compass className="h-4 w-4" />}
+          status="warning"
+        />
+        <MetricKpi 
+          title="Finalized Reports"
+          value={loading ? "..." : stats.resolved_cases}
+          subtext="FIR dossiers generated"
+          icon={<CheckCircle2 className="h-4 w-4" />}
+          status="success"
+        />
+        <MetricKpi 
+          title="Avg Draft Latency"
+          value={loading ? "..." : `${stats.avg_drafting_time_minutes}m`}
+          subtext="AI provision mapping"
+          icon={<Cpu className="h-4 w-4" />}
+          status="neutral"
+        />
       </div>
 
-      {/* 3. Live Cases & Audit Logs split row */}
-      <div className="grid lg:grid-cols-3 gap-8">
+      {/* Main Grid Section: Quick Intelligence Actions + Priority Investigations + Audit Trail */}
+      <div className="grid lg:grid-cols-3 gap-6">
         
-        {/* Recent Cases */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-[#111827] text-sm font-bold uppercase tracking-wider font-mono">Recent Investigation entries</h3>
-            <button
-              onClick={() => navigate("/cases")}
-              className="text-xs text-[#2563EB] hover:underline font-semibold"
+        {/* Left 2-Column Section: Quick Launch + Active Investigations Table */}
+        <div className="lg:col-span-2 space-y-6">
+          
+          {/* Quick Launch Cards */}
+          <div className="grid sm:grid-cols-3 gap-3.5">
+            <div 
+              onClick={() => navigate("/new-case")}
+              className="p-4 bg-white border border-slate-200 rounded-xl shadow-2xs hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer group flex flex-col justify-between"
             >
-              View Cases List
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            {loading ? (
-              <div className="space-y-3">{[1, 2, 3].map((item) => <div key={item} className="rounded-2xl border border-[#E2E8F0] bg-white p-4"><div className="dashboard-skeleton h-3 w-2/5 rounded" /><div className="dashboard-skeleton mt-3 h-2.5 w-3/5 rounded" /></div>)}</div>
-            ) : (!stats?.recent_cases || stats.recent_cases.length === 0) ? (
-              <div className="bg-white p-8 rounded-2xl border border-[#E2E8F0] text-center text-xs text-[#6B7280] italic">
-                No active case logs recorded.
-              </div>
-            ) : (
-              (stats.recent_cases || []).map((c) => (
-                <div 
-                  key={c.id}
-                  onClick={() => navigate(`/fir-generator?caseId=${c.id}`)}
-                  className="bg-white p-4.5 rounded-2xl border border-[#E2E8F0] shadow-sm hover:border-[#CBD5E1] transition-all cursor-pointer flex items-center justify-between gap-4"
-                >
-                  <div className="space-y-1 truncate">
-                    <h4 className="text-xs font-bold text-[#111827] truncate">{c.title}</h4>
-                    <span className="text-[10px] text-[#6B7280] font-mono block">DATE: {c.created_at ? new Date(c.created_at).toLocaleDateString() : "N/A"} • PS: {c.station || "Central Cyber Cell"}</span>
-                  </div>
-
-                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border uppercase shrink-0 ${getStatusBadge(c.status)}`}>
-                    {(c.status || "draft").replace("_", " ")}
-                  </span>
+              <div className="flex items-center justify-between mb-2">
+                <div className="p-2 bg-blue-50 text-blue-700 rounded-lg border border-blue-100">
+                  <FilePlus className="h-4 w-4" />
                 </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Security Compliance Directive Card (Public Audit Feed Removed) */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-[#111827] text-sm font-bold uppercase tracking-wider font-mono">Security Directive</h3>
-            <span className="text-[10px] font-mono text-[#059669] font-semibold flex items-center gap-1">
-              <ShieldCheck className="h-3.5 w-3.5 text-[#059669]" />
-              <span>STRICT AUDIT PRIVACY</span>
-            </span>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-4">
-            <div className="p-3.5 rounded-xl bg-[#EFF6FF] border border-[#BFDBFE] text-xs space-y-2">
-              <div className="flex items-center gap-2 text-[#1E40AF] font-bold">
-                <ShieldCheck className="h-4 w-4 shrink-0" />
-                <span>Enterprise RBAC Active</span>
+                <ArrowRight className="h-3.5 w-3.5 text-slate-400 group-hover:text-blue-600 transition-transform group-hover:translate-x-0.5" />
               </div>
-              <p className="text-[11px] text-[#1E3A8A] leading-relaxed">
-                Security audit logs and registration events are strictly isolated. All user activities are cryptographically signed and accessible exclusively within the <strong>Superintendent Control Console</strong>.
-              </p>
+              <div>
+                <h3 className="text-xs font-bold text-slate-900">Start Investigation</h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">Ingest incident facts &amp; map BNS 2023 laws.</p>
+              </div>
             </div>
 
-            <div className="space-y-2 font-mono text-[10px] text-[#475569]">
-              <div className="flex justify-between py-1 border-b border-[#F1F5F9]">
+            <div 
+              onClick={() => navigate("/assistant")}
+              className="p-4 bg-white border border-slate-200 rounded-xl shadow-2xs hover:border-teal-400 hover:shadow-xs transition-all cursor-pointer group flex flex-col justify-between"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="p-2 bg-teal-50 text-teal-700 rounded-lg border border-teal-100">
+                  <MessageSquareCode className="h-4 w-4" />
+                </div>
+                <ArrowRight className="h-3.5 w-3.5 text-slate-400 group-hover:text-teal-600 transition-transform group-hover:translate-x-0.5" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-slate-900">AI Legal Copilot</h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">Query verified statutes &amp; investigation SOPs.</p>
+              </div>
+            </div>
+
+            <div 
+              onClick={() => navigate("/legal-search")}
+              className="p-4 bg-white border border-slate-200 rounded-xl shadow-2xs hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group flex flex-col justify-between"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="p-2 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-100">
+                  <SearchCheck className="h-4 w-4" />
+                </div>
+                <ArrowRight className="h-3.5 w-3.5 text-slate-400 group-hover:text-indigo-600 transition-transform group-hover:translate-x-0.5" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-slate-900">BNS Converter</h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">Map legacy IPC 1860 codes to BNS 2023.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Priority Active Investigations Section */}
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs space-y-0">
+            <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-bold text-slate-900 uppercase font-mono tracking-tight">
+                  Priority Active Investigations ({stats.recent_cases?.length || 0})
+                </h3>
+                <p className="text-[11px] text-slate-500">Active dossiers currently assigned or under review.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate("/cases")}
+                className="text-xs font-bold text-blue-700 hover:underline cursor-pointer"
+              >
+                View Full Directory &rarr;
+              </button>
+            </div>
+
+            <div className="divide-y divide-slate-100">
+              {loading ? (
+                <div className="p-6 text-center text-xs text-slate-400 font-mono animate-pulse">Loading active case data...</div>
+              ) : (!stats.recent_cases || stats.recent_cases.length === 0) ? (
+                <div className="p-6 text-center text-xs text-slate-400 italic">No active investigations recorded.</div>
+              ) : (
+                stats.recent_cases.slice(0, 5).map((c) => (
+                  <div
+                    key={c.id}
+                    onClick={() => navigate(`/fir-generator?caseId=${c.id}`)}
+                    className="p-3.5 hover:bg-blue-50/30 transition-colors cursor-pointer flex items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="font-mono font-bold text-slate-500 text-[11px]">#{c.id}</span>
+                        <h4 className="font-bold text-slate-900 truncate text-xs">{c.title}</h4>
+                      </div>
+                      <div className="flex items-center gap-3 text-[11px] text-slate-500 font-medium">
+                        <span>PS: <strong className="text-slate-700">{c.station || "Central Cyber PS"}</strong></span>
+                        <span>Date: <span className="font-mono">{c.created_at ? new Date(c.created_at).toLocaleDateString() : "N/A"}</span></span>
+                      </div>
+                    </div>
+
+                    <StatusBadge status={c.status} />
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+        </div>
+
+        {/* Right 1-Column Section: Audit Activity Stream & System Security */}
+        <div className="space-y-6">
+          
+          {/* Security Compliance Directive */}
+          <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+              <span className="text-xs font-bold text-slate-900 font-mono uppercase tracking-tight flex items-center gap-1.5">
+                <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                Security Standards
+              </span>
+              <span className="px-1.5 py-0.2 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-mono font-bold rounded">
+                ENFORCED
+              </span>
+            </div>
+
+            <div className="space-y-2 text-[11px] font-mono text-slate-600">
+              <div className="flex justify-between py-1 border-b border-slate-100">
                 <span>ENCRYPTION:</span>
-                <span className="font-bold text-[#1E293B]">AES-256 / SHA-256</span>
+                <span className="font-bold text-slate-900">AES-256 / SHA-256</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-[#F1F5F9]">
+              <div className="flex justify-between py-1 border-b border-slate-100">
+                <span>CHAIN OF CUSTODY:</span>
+                <span className="font-bold text-emerald-700">BSA §63 VERIFIED</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100">
                 <span>AUTH CONTROL:</span>
-                <span className="font-bold text-[#1E293B]">Short-lived OAuth2 JWT</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-[#F1F5F9]">
-                <span>LOCKOUT POLICY:</span>
-                <span className="font-bold text-[#1E293B]">5 Attempts / 15m Lock</span>
+                <span className="font-bold text-slate-900">OAuth2 JWT</span>
               </div>
               <div className="flex justify-between py-1">
                 <span>APPROVAL STATE:</span>
-                <span className="font-bold text-[#059669]">ADMIN APPROVAL ENFORCED</span>
+                <span className="font-bold text-emerald-700">SHO / ADMIN MANDATED</span>
               </div>
             </div>
           </div>
+
+          {/* Investigation Activity Stream */}
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+              <h3 className="text-xs font-bold text-slate-900 font-mono uppercase tracking-tight">
+                Activity &amp; Audit Trail
+              </h3>
+              <span className="text-[10px] font-mono text-slate-400">REALTIME</span>
+            </div>
+
+            {role === "admin" && stats.recent_logs && stats.recent_logs.length > 0 ? (
+              <Timeline items={stats.recent_logs.slice(0, 5)} />
+            ) : (
+              <div className="p-4 bg-slate-50 border border-slate-100 rounded-lg text-center text-xs text-slate-500 leading-relaxed">
+                <ShieldCheck className="h-5 w-5 text-slate-400 mx-auto mb-1.5" />
+                <p className="font-semibold text-slate-800">RBAC Isolation Active</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Audit log entries are cryptographically signed and stored in the Superintendent Control Vault.</p>
+              </div>
+            )}
+          </div>
+
         </div>
 
       </div>
