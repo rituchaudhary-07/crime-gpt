@@ -6,44 +6,44 @@ from typing import List, Dict, Any, Tuple
 class AIService:
     @staticmethod
     def get_provider_details(custom_key: str = "") -> Tuple[str, str, str]:
-        # Custom key passed from request takes precedence, otherwise check env variables
-        openrouter_key = os.getenv("OPENROUTER_API_KEY", "")
-        groq_key = os.getenv("GROQ_API_KEY", "")
-        openai_key = os.getenv("OPENAI_API_KEY", "")
-        gemini_key = os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
+        def is_valid_key(key: str) -> bool:
+            if not key or not isinstance(key, str):
+                return False
+            cleaned = key.strip().lower()
+            return cleaned not in [
+                "", "your_gemini_api_key_here", "your_api_key_here", 
+                "your_openai_api_key", "your_groq_api_key", "<your_api_key>"
+            ] and len(key.strip()) > 10
+
+        openrouter_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+        groq_key = os.getenv("GROQ_API_KEY", "").strip()
+        openai_key = os.getenv("OPENAI_API_KEY", "").strip()
+        gemini_key = os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("GOOGLE_API_KEY", "").strip()
         
-        # 1. OpenRouter (Keys start with 'sk-or-')
-        if custom_key and custom_key.startswith("sk-or-"):
-            return "openrouter", custom_key, "deepseek/deepseek-chat-v3"
-        elif openrouter_key:
+        c_key = custom_key.strip() if custom_key else ""
+
+        # 1. OpenRouter
+        if is_valid_key(c_key) and c_key.startswith("sk-or-"):
+            return "openrouter", c_key, "deepseek/deepseek-chat-v3"
+        elif is_valid_key(openrouter_key):
             return "openrouter", openrouter_key, "deepseek/deepseek-chat-v3"
             
-        # 2. Groq (Keys start with 'gsk_')
-        if custom_key and custom_key.startswith("gsk_"):
-            return "groq", custom_key, "llama-3.3-70b-versatile"
-        elif groq_key:
+        # 2. Groq
+        if is_valid_key(c_key) and c_key.startswith("gsk_"):
+            return "groq", c_key, "llama-3.3-70b-versatile"
+        elif is_valid_key(groq_key):
             return "groq", groq_key, "llama-3.3-70b-versatile"
             
-        # 3. OpenAI (Keys start with 'sk-' and not 'sk-or-')
-        if custom_key and (custom_key.startswith("sk-") and not custom_key.startswith("sk-or-")):
-            return "openai", custom_key, "gpt-4o-mini"
-        elif openai_key:
+        # 3. OpenAI
+        if is_valid_key(c_key) and (c_key.startswith("sk-") and not c_key.startswith("sk-or-")):
+            return "openai", c_key, "gpt-4o-mini"
+        elif is_valid_key(openai_key):
             return "openai", openai_key, "gpt-4o-mini"
 
-        # 4. Gemini (Keys start with 'AIzaSy' or GEMINI_API_KEY env var)
-        if custom_key and custom_key.startswith("AIzaSy"):
-            return "gemini", custom_key, "gemini-1.5-flash"
-        elif gemini_key:
-            return "gemini", gemini_key, "gemini-1.5-flash"
-
-        # If custom key does not match format, check env fallbacks first
-        if openrouter_key:
-            return "openrouter", openrouter_key, "deepseek/deepseek-chat-v3"
-        elif groq_key:
-            return "groq", groq_key, "llama-3.3-70b-versatile"
-        elif openai_key:
-            return "openai", openai_key, "gpt-4o-mini"
-        elif gemini_key:
+        # 4. Gemini
+        if is_valid_key(c_key):
+            return "gemini", c_key, "gemini-1.5-flash"
+        elif is_valid_key(gemini_key):
             return "gemini", gemini_key, "gemini-1.5-flash"
             
         return "offline", "", ""
