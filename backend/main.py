@@ -1321,8 +1321,19 @@ def get_single_conversation(
         ChatSession.session_id == conv_id, 
         ChatSession.user_id == current_user.id
     ).first()
+    
     if not session:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        # Return graceful empty conversation instead of throwing 404
+        return {
+            "_id": conv_id,
+            "id": conv_id,
+            "session_id": conv_id,
+            "userId": current_user.id,
+            "title": "New Inquiry Thread",
+            "messages": [],
+            "createdAt": datetime.utcnow().isoformat(),
+            "updatedAt": datetime.utcnow().isoformat()
+        }
         
     messages = db.query(ChatMessage).filter(
         ChatMessage.session_id == conv_id,
@@ -1374,10 +1385,16 @@ def rename_conversation(
         ChatSession.user_id == current_user.id
     ).first()
     if not session:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        session = ChatSession(
+            session_id=conv_id,
+            user_id=current_user.id,
+            title=request.title
+        )
+        db.add(session)
+    else:
+        session.title = request.title
+        session.updated_at = datetime.utcnow()
         
-    session.title = request.title
-    session.updated_at = datetime.utcnow()
     db.commit()
     return {
         "_id": session.session_id,
@@ -1400,15 +1417,13 @@ def delete_conversation(
         ChatSession.session_id == conv_id, 
         ChatSession.user_id == current_user.id
     ).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-        
-    db.query(ChatMessage).filter(
-        ChatMessage.session_id == conv_id,
-        ChatMessage.user_id == current_user.id
-    ).delete()
-    db.delete(session)
-    db.commit()
+    if session:
+        db.query(ChatMessage).filter(
+            ChatMessage.session_id == conv_id,
+            ChatMessage.user_id == current_user.id
+        ).delete()
+        db.delete(session)
+        db.commit()
     return {"message": "Conversation deleted successfully"}
 
 @app.post("/conversations/{conv_id}/messages")
@@ -1458,14 +1473,13 @@ def rename_chat_session(
     db: Session = Depends(get_db)
 ):
     session = db.query(ChatSession).filter(ChatSession.session_id == session_id, ChatSession.user_id == current_user.id).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="Chat session not found")
-        
-    session.title = request.title
-    session.updated_at = datetime.utcnow()
-    db.commit()
-    return {"session_id": session.session_id, "title": session.title, "message": "Session renamed successfully"}
+    if session:
+        session.title = request.title
+        session.updated_at = datetime.utcnow()
+        db.commit()
+    return {"message": "Updated"}
 
+@app.delete("/chat/sessions/{session_id}")
 @app.delete("/api/chat/sessions/{session_id}")
 def delete_chat_session(
     session_id: str,
@@ -1524,19 +1538,16 @@ def general_ai_chat(
     }
     response_mode = request.mode if request.mode in mode_guidance else "legal_research"
     
-    # Handle ChatSession association
+    # Handle ChatSession association with resilient upsert
     active_session = None
     if request.session_id:
         active_session = db.query(ChatSession).filter(
             ChatSession.session_id == request.session_id, 
             ChatSession.user_id == current_user.id
         ).first()
-        if not active_session:
-            raise HTTPException(status_code=404, detail="Conversation not found")
 
     if not active_session:
-        # Create auto session with title from first message
-        session_id = f"session_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{random.randint(1000, 9999)}"
+        session_id = request.session_id or f"conv_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{random.randint(1000, 9999)}"
         active_session = ChatSession(
             session_id=session_id,
             user_id=current_user.id,
