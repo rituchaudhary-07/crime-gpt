@@ -389,8 +389,12 @@ class KeyValidateRequest(BaseModel):
     api_key: str
 
 # Helper to verify case access (RBAC enforcement)
-def verify_case_access(case_id: int, current_user: User, db: Session) -> Case:
-    case = db.query(Case).filter(Case.id == case_id).first()
+def verify_case_access(case_id: Any, current_user: User, db: Session) -> Case:
+    try:
+        cid = int(case_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
+    case = db.query(Case).filter(Case.id == cid).first()
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     
@@ -725,6 +729,7 @@ def list_archived_cases(current_user: User = Depends(get_current_user), db: Sess
         query = query.filter((Case.created_by == current_user.id) | (Case.assigned_to == current_user.id))
     return [serialize_case(case, db) for case in query.order_by(Case.created_at.desc()).all()]
 
+@app.post("/cases", response_model=CaseResponse)
 @app.post("/api/cases", response_model=CaseResponse)
 def create_case(case_data: CaseCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     case = Case(
@@ -746,14 +751,22 @@ def create_case(case_data: CaseCreate, current_user: User = Depends(get_current_
     log_audit(db, current_user.username, "CREATE_CASE", f"Created Case ID {case.id} - '{case.title}'", case_id=case.id)
     return case
 
+@app.get("/cases/{case_id}")
 @app.get("/api/cases/{case_id}")
-def get_case(case_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    case = verify_case_access(case_id, current_user, db)
-    log_audit(db, current_user.username, "VIEW_CASE", f"Viewed case details for ID {case_id}", case_id=case_id)
+def get_case(case_id: Any, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if str(case_id).lower() in ["archive", "archived"]:
+        return list_archived_cases(current_user=current_user, db=db)
+    try:
+        cid = int(case_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
+    case = verify_case_access(cid, current_user, db)
+    log_audit(db, current_user.username, "VIEW_CASE", f"Viewed case details for ID {cid}", case_id=cid)
     return serialize_case(case, db)
 
+@app.put("/cases/{case_id}")
 @app.put("/api/cases/{case_id}")
-def update_case(case_id: int, case_data: CaseUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def update_case(case_id: Any, case_data: CaseUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     case = verify_case_access(case_id, current_user, db)
     
     for key, value in case_data.dict(exclude_unset=True).items():
@@ -765,8 +778,9 @@ def update_case(case_id: int, case_data: CaseUpdate, current_user: User = Depend
     log_audit(db, current_user.username, "UPDATE_CASE", f"Modified case metadata for ID {case_id}", case_id=case_id)
     return serialize_case(case, db)
 
+@app.delete("/cases/{case_id}")
 @app.delete("/api/cases/{case_id}")
-def delete_case(case_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_case(case_id: Any, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     case = verify_case_access(case_id, current_user, db)
     
     title = case.title
@@ -1211,6 +1225,8 @@ def get_case_sop_chat(
 
 # --- CONVERSATIONS & CHAT SESSION ENDPOINTS ---
 
+@app.get("/conversations")
+@app.get("/chat/sessions")
 @app.get("/api/conversations")
 @app.get("/api/chat/sessions")
 def get_conversations(
@@ -1257,6 +1273,8 @@ def get_conversations(
         logger.exception("Unable to fetch conversations for user_id=%s", current_user.id)
         raise HTTPException(status_code=500, detail="Unable to load conversation history") from e
 
+@app.post("/conversations")
+@app.post("/chat/sessions")
 @app.post("/api/conversations")
 @app.post("/api/chat/sessions")
 def create_conversation(
@@ -1284,7 +1302,10 @@ def create_conversation(
         "updatedAt": session.updated_at.isoformat()
     }
 
+@app.get("/conversations/{conv_id}")
+@app.get("/chat/sessions/{conv_id}")
 @app.get("/api/conversations/{conv_id}")
+@app.get("/api/chat/sessions/{conv_id}")
 def get_single_conversation(
     conv_id: str,
     current_user: User = Depends(get_current_user),
@@ -1327,6 +1348,9 @@ def get_single_conversation(
         "updatedAt": session.updated_at.isoformat() if hasattr(session.updated_at, 'isoformat') else str(session.updated_at)
     }
 
+@app.patch("/conversations/{conv_id}")
+@app.put("/conversations/{conv_id}")
+@app.put("/chat/sessions/{conv_id}")
 @app.patch("/api/conversations/{conv_id}")
 @app.put("/api/conversations/{conv_id}")
 @app.put("/api/chat/sessions/{conv_id}")
@@ -1351,6 +1375,8 @@ def rename_conversation(
         "message": "Conversation renamed successfully"
     }
 
+@app.delete("/conversations/{conv_id}")
+@app.delete("/chat/sessions/{conv_id}")
 @app.delete("/api/conversations/{conv_id}")
 @app.delete("/api/chat/sessions/{conv_id}")
 def delete_conversation(
@@ -1365,7 +1391,10 @@ def delete_conversation(
         db.commit()
     return {"message": "Conversation deleted successfully"}
 
+@app.post("/conversations/{conv_id}/messages")
+@app.post("/chat/sessions/{conv_id}/messages")
 @app.post("/api/conversations/{conv_id}/messages")
+@app.post("/api/chat/sessions/{conv_id}/messages")
 def send_message_to_conversation(
     conv_id: str,
     request: GeneralChatRequest,
@@ -1375,6 +1404,7 @@ def send_message_to_conversation(
     request.session_id = conv_id
     return general_ai_chat(request, current_user, db)
 
+@app.post("/chat/sessions")
 @app.post("/api/chat/sessions")
 def create_chat_session(
     request: CreateSessionRequest,
@@ -1399,6 +1429,7 @@ def create_chat_session(
         "updated_at": session.updated_at.isoformat()
     }
 
+@app.put("/chat/sessions/{session_id}")
 @app.put("/api/chat/sessions/{session_id}")
 def rename_chat_session(
     session_id: str,
