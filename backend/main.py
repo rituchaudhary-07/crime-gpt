@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import Response, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from backend.ai_service import AIService
@@ -511,12 +512,24 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
     
     input_str = form_data.username.strip().lower()
     
-    # Search by username, email, or phone
+    # Search by username, email, or phone (case-insensitive)
     user = db.query(User).filter(
+        (func.lower(User.username) == input_str) | 
         (User.username == form_data.username) | 
-        (User.email == input_str) | 
+        (func.lower(User.email) == input_str) | 
         (User.phone == form_data.username)
     ).first()
+
+    # Dynamic fallback to seed default accounts if database predates new seed updates
+    if not user and input_str in ["ritu_officer", "krupa_officer", "officer_admin"]:
+        try:
+            seed_data()
+            user = db.query(User).filter(
+                (func.lower(User.username) == input_str) | 
+                (User.username == form_data.username)
+            ).first()
+        except Exception:
+            pass
 
     if not user:
         log_audit(db, form_data.username, "LOGIN_FAILED", "Invalid credentials", ip_address=client_ip, user_agent=user_agent)
