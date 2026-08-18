@@ -772,6 +772,18 @@ export const api = {
     return response.json();
   },
   
+  getOfficers: async () => {
+    try {
+      const res = await requestJson(`${API_BASE_URL}/officers`, {
+        method: "GET",
+        headers: getHeaders()
+      }, "Unable to load officers list");
+      return Array.isArray(res) ? res : (res?.officers || []);
+    } catch (e) {
+      return [];
+    }
+  },
+
   getUsers: async () => {
     const response = await fetch(`${API_BASE_URL}/admin/users`, {
       method: "GET",

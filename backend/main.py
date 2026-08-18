@@ -824,8 +824,22 @@ def delete_case(case_id: Any, current_user: User = Depends(get_current_user), db
     log_audit(db, current_user.username, "DELETE_CASE", f"Deleted case ID {case_id} - '{title}'", case_id=case_id)
     return {"message": "Case deleted successfully"}
 
+@app.get("/officers")
+@app.get("/api/officers")
+def get_officers_list(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    officers = db.query(User).order_by(User.username.asc()).all()
+    return [{
+        "id": u.id,
+        "username": u.username,
+        "role": u.role,
+        "badge_number": u.badge_number,
+        "station": u.station,
+        "status": u.status
+    } for u in officers]
+
+@app.post("/cases/{case_id}/assign")
 @app.post("/api/cases/{case_id}/assign")
-def assign_case(case_id: int, request: CaseAssignRequest, current_user: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+def assign_case(case_id: int, request: CaseAssignRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     case = db.query(Case).filter(Case.id == case_id).first()
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")

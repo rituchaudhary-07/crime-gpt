@@ -34,9 +34,11 @@ export default function CaseManagement() {
 
   useEffect(() => {
     loadCases();
-    if (role === "admin") {
-      api.getUsers().then(setUsers).catch(() => {});
-    }
+    api.getOfficers()
+      .then(data => setUsers(Array.isArray(data) ? data : []))
+      .catch(() => {
+        api.getUsers().then(setUsers).catch(() => {});
+      });
   }, []);
 
   const loadCases = async () => {
@@ -184,9 +186,20 @@ export default function CaseManagement() {
       header: "ASSIGNED OFFICER",
       key: "assigned_officer_name",
       render: (row) => (
-        <span className="text-[11px] font-mono text-slate-700 font-medium">
-          {row.assigned_officer_name || "Unassigned"}
-        </span>
+        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <select
+            value={row.assigned_to || ""}
+            onChange={(e) => handleAssign(e, row.id, e.target.value)}
+            className="text-[11px] font-medium bg-slate-50 border border-slate-300 rounded px-2 py-1 focus:ring-1 focus:ring-blue-500 focus:outline-none cursor-pointer"
+          >
+            <option value="">-- Assign Officer --</option>
+            {users.map(u => (
+              <option key={u.id} value={u.id}>
+                {u.username} ({u.role || "Officer"})
+              </option>
+            ))}
+          </select>
+        </div>
       )
     },
     {
