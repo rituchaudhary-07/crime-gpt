@@ -130,10 +130,10 @@ export default function AIAssistant() {
         setMessages([]);
       }
     } catch (err) {
-      if (err.status === 401) {
+      if (err.status === 401 || err.message?.includes("401") || err.message?.includes("authenticated")) {
         setHistoryError("Session expired. Please sign in again.");
       } else {
-        setHistoryError("Backend server is offline (http://127.0.0.1:8000). Please start the backend server.");
+        setHistoryError(err.message || "Unable to connect to investigation server. Please check your network or sign in again.");
       }
     } finally {
       setSessionsLoading(false);
