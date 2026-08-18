@@ -133,7 +133,7 @@ export default function AIAssistant() {
       if (err.status === 401) {
         setHistoryError("Session expired. Please sign in again.");
       } else {
-        setHistoryError("Unable to connect to investigation server. Confirm network or server status.");
+        setHistoryError("Backend server is offline (http://127.0.0.1:8000). Please start the backend server.");
       }
     } finally {
       setSessionsLoading(false);
