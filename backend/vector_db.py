@@ -41,9 +41,12 @@ class VectorDBService:
             return False
 
         try:
-            # Persistent client in local database folder
+            # Persistent client in local database folder or /tmp for Vercel
             base_dir = os.path.dirname(os.path.abspath(__file__))
-            db_path = os.path.join(base_dir, "db", "chroma")
+            if os.getenv("VERCEL") or os.getenv("VERCEL_ENV"):
+                db_path = "/tmp/chroma"
+            else:
+                db_path = os.path.join(base_dir, "db", "chroma")
             os.makedirs(db_path, exist_ok=True)
             
             # Initialize persistent client

@@ -182,7 +182,7 @@ export default function AIAssistant() {
 
     let currentSessionId = activeSessionId;
 
-    if (!currentSessionId) {
+    if (!currentSessionId || currentSessionId === "null" || currentSessionId === "undefined") {
       try {
         const newSession = await api.createConversation("New Inquiry Thread");
         currentSessionId = newSession.session_id || newSession.id || newSession._id;

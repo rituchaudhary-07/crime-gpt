@@ -343,6 +343,9 @@ class IntakeRequest(BaseModel):
     date: Optional[str] = ""
     custom_key: Optional[str] = None
 
+class CaseStatusUpdate(BaseModel):
+    status: str
+
 class FIRDraftUpdate(BaseModel):
     fir_draft_text: Optional[str] = None
     incident_summary: Optional[str] = None
@@ -776,6 +779,16 @@ def update_case(case_id: Any, case_data: CaseUpdate, current_user: User = Depend
     db.refresh(case)
     
     log_audit(db, current_user.username, "UPDATE_CASE", f"Modified case metadata for ID {case_id}", case_id=case_id)
+    return serialize_case(case, db)
+
+@app.put("/cases/{case_id}/status")
+@app.put("/api/cases/{case_id}/status")
+def update_case_status(case_id: Any, payload: CaseStatusUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    case = verify_case_access(case_id, current_user, db)
+    case.status = payload.status
+    db.commit()
+    db.refresh(case)
+    log_audit(db, current_user.username, "UPDATE_CASE_STATUS", f"Updated status of case ID {case_id} to '{payload.status}'", case_id=case_id)
     return serialize_case(case, db)
 
 @app.delete("/cases/{case_id}")
@@ -1522,6 +1535,7 @@ def get_session_messages(
         })
     return serialized
 
+@app.post("/assistant/chat")
 @app.post("/api/assistant/chat")
 def general_ai_chat(
     request: GeneralChatRequest,
@@ -2086,7 +2100,7 @@ def get_stats(current_user: User = Depends(get_current_user), db: Session = Depe
         under_review = db.query(Case).filter(Case.status == "under_review").count()
         filed_cases = db.query(Case).filter(Case.status == "filed").count()
         investigating = db.query(Case).filter(Case.status == "investigating").count()
-        closed_cases = db.query(Case).filter(Case.status == "closed").count()
+        closed_cases = db.query(Case).filter(Case.status.in_(["closed", "archived"])).count()
         recent_cases = db.query(Case).order_by(Case.created_at.desc()).limit(8).all()
         # Audit logs exposed STRICTLY to admin
         recent_logs = db.query(Log).order_by(Log.timestamp.desc()).limit(10).all()
@@ -2160,7 +2174,7 @@ def get_stats(current_user: User = Depends(get_current_user), db: Session = Depe
         "open_cases": draft_cases + under_review + investigating,
         "active_cases": investigating,
         "closed_cases": closed_cases,
-        "resolved_cases": filed_cases, # Filed / finalized counts as resolved
+        "resolved_cases": filed_cases + closed_cases, # Filed or Closed counts as finalized/resolved report
         "total_users": total_users,
         "total_logs": total_logs,
         "recent_logs": recent_logs_serialized,

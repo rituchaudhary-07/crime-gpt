@@ -48,7 +48,8 @@ const formatErrorMessage = (detail, fallbackMessage, status) => {
 
 const requestJson = async (url, options, fallbackMessage) => {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 12000);
+  const timeoutMs = options?.timeoutMs || 45000;
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(url, { ...options, signal: controller.signal });
@@ -77,7 +78,7 @@ const requestJson = async (url, options, fallbackMessage) => {
   } catch (error) {
     if (error instanceof ApiRequestError) throw error;
     if (error.name === "AbortError") {
-      throw new ApiRequestError("The API did not respond within 12 seconds. Check the server logs or network.", { code: "timeout" });
+      throw new ApiRequestError("The server request timed out. Please retry your inquiry.", { code: "timeout" });
     }
     if (!navigator.onLine) {
       throw new ApiRequestError("You appear to be offline. Reconnect and retry the request.", { code: "offline" });
@@ -528,10 +529,19 @@ export const api = {
 
   sendMessageToConversation: async (convId, message, mode = "legal_research") => {
     const customKey = localStorage.getItem("gemini_api_key") || "";
-    return requestJson(`${API_BASE_URL}/conversations/${convId}/messages`, {
+    let targetId = convId;
+    if (!targetId || targetId === "null" || targetId === "undefined") {
+      try {
+        const newSession = await api.createConversation("New Inquiry Thread");
+        targetId = newSession.session_id || newSession.id || newSession._id;
+      } catch (e) {
+        return api.generalChat(message, null, mode);
+      }
+    }
+    return requestJson(`${API_BASE_URL}/conversations/${targetId}/messages`, {
       method: "POST",
       headers: getHeaders(),
-      body: JSON.stringify({ message, session_id: convId, mode, custom_key: customKey })
+      body: JSON.stringify({ message, session_id: targetId, mode, custom_key: customKey })
     }, "Failed to send message to conversation");
   },
 

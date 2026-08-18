@@ -26,17 +26,21 @@ load_dotenv(BASE_DIR / ".env")
 if IS_VERCEL and not os.getenv("DATABASE_URL"):
     DATABASE_URL = "sqlite:////tmp/crimegpt.db"
 else:
-    DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DB_DIR}/crimegpt.db")
+    default_db_path = (DB_DIR / "crimegpt.db").as_posix()
+    DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{default_db_path}")
 
 if DATABASE_URL.startswith("sqlite:///"):
     db_file_str = DATABASE_URL.replace("sqlite:///", "")
     db_file_path = Path(db_file_str)
     if not db_file_path.is_absolute():
-        db_file_path = (BASE_DIR.parent / db_file_str).resolve()
+        db_file_path = (BASE_DIR / db_file_str).resolve()
     try:
         db_file_path.parent.mkdir(parents=True, exist_ok=True)
     except Exception:
         pass
+    # Normalize path with forward slashes for SQLite compatibility on Windows
+    DATABASE_URL = f"sqlite:///{db_file_path.as_posix()}"
+
 
 # Security
 SECRET_KEY = os.getenv("SECRET_KEY", "b3d5c6f1a8e9c2b4d7f5a6b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8")
