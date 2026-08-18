@@ -100,12 +100,12 @@ export default function CaseManagement() {
 
   const handleAssign = async (e, caseId, officerId) => {
     e.stopPropagation();
-    if (!officerId) return;
+    if (!officerId || officerId === "" || isNaN(parseInt(officerId))) return;
     setActionSuccess("");
     setError("");
     try {
-      await api.assignCase(caseId, parseInt(officerId));
-      setActionSuccess(`Case #${caseId} assigned to officer.`);
+      const res = await api.assignCase(caseId, parseInt(officerId));
+      setActionSuccess(res?.message || `Case #${caseId} successfully assigned.`);
       loadCases();
     } catch (err) {
       setError("Assign failed: " + err.message);
@@ -185,22 +185,31 @@ export default function CaseManagement() {
     {
       header: "ASSIGNED OFFICER",
       key: "assigned_officer_name",
-      render: (row) => (
-        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-          <select
-            value={row.assigned_to || ""}
-            onChange={(e) => handleAssign(e, row.id, e.target.value)}
-            className="text-[11px] font-medium bg-slate-50 border border-slate-300 rounded px-2 py-1 focus:ring-1 focus:ring-blue-500 focus:outline-none cursor-pointer"
-          >
-            <option value="">-- Assign Officer --</option>
-            {users.map(u => (
-              <option key={u.id} value={u.id}>
-                {u.username} ({u.role || "Officer"})
-              </option>
-            ))}
-          </select>
-        </div>
-      )
+      render: (row) => {
+        const assignedName = row.assigned_officer_name || (row.assigned_to && users.find(u => u.id === row.assigned_to)?.username);
+        return (
+          <div className="flex flex-col gap-1 min-w-[130px]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-1">
+              <User className="h-3 w-3 text-slate-400" />
+              <span className={`text-[11px] font-semibold ${assignedName ? "text-slate-800" : "text-slate-400"}`}>
+                {assignedName || "Unassigned"}
+              </span>
+            </div>
+            <select
+              value={row.assigned_to || ""}
+              onChange={(e) => handleAssign(e, row.id, e.target.value)}
+              className="text-[10.5px] font-medium bg-slate-50 hover:bg-white border border-slate-300 rounded px-2 py-0.5 focus:ring-1 focus:ring-blue-500 focus:outline-none cursor-pointer text-slate-700 max-w-[145px]"
+            >
+              <option value="">-- Change Officer --</option>
+              {users.map(u => (
+                <option key={u.id} value={u.id}>
+                  {u.username} ({u.role || "Officer"})
+                </option>
+              ))}
+            </select>
+          </div>
+        );
+      }
     },
     {
       header: "STAGE / STATUS",
