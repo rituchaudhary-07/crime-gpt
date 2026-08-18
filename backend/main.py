@@ -87,6 +87,27 @@ async def log_requests(request: Request, call_next):
     return response
 
 
+@app.middleware("http")
+async def vercel_api_rewrite_middleware(request: Request, call_next):
+    """Fallback middleware ensuring /api and non-/api path aliases match on Vercel deployment."""
+    response = await call_next(request)
+    if response.status_code == 404:
+        path = request.scope.get("path", "")
+        if path.startswith("/api/"):
+            alt_path = path[4:]
+            request.scope["path"] = alt_path
+            alt_response = await call_next(request)
+            if alt_response.status_code != 404:
+                return alt_response
+        elif not path.startswith("/api") and path != "/" and not path.startswith("/uploads"):
+            alt_path = "/api" + path
+            request.scope["path"] = alt_path
+            alt_response = await call_next(request)
+            if alt_response.status_code != 404:
+                return alt_response
+    return response
+
+
 @app.get("/health", tags=["system"])
 @app.get("/api/health", tags=["system"])
 def health_check():
@@ -864,6 +885,7 @@ def delete_chat_history(chat_id: int, current_user: User = Depends(get_current_u
 
 # --- FIR GENERATOR FLOWS ---
 
+@app.post("/cases/intake")
 @app.post("/api/cases/intake")
 def intake_analyze(request: IntakeRequest):
     """
@@ -878,6 +900,7 @@ def intake_analyze(request: IntakeRequest):
     )
     return result
 
+@app.post("/cases/{case_id}/analyze")
 @app.post("/api/cases/{case_id}/analyze")
 def analyze_case(
     case_id: int, 
