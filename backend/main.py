@@ -169,78 +169,55 @@ def seed_data():
     logger.info("NyayaIQ API starting; allowed CORS origins: %s", ", ".join(CORS_ORIGINS))
     db = next(get_db())
     try:
-        # Check admin
-        admin = db.query(User).filter(User.username == "officer_admin").first()
-        if not admin:
-            hashed_pw = get_password_hash("crimegpt2026")
-            new_admin = User(
-                username="officer_admin",
+        # Seed ritu_officer (Admin / Officer)
+        pw_hash = get_password_hash("crimegpt2026")
+        ritu = db.query(User).filter((User.username == "ritu_officer") | (User.username == "officer_admin")).first()
+        if not ritu:
+            new_ritu = User(
+                username="ritu_officer",
                 email="rituchaudhary15077@gmail.com",
                 phone="8849591402",
                 gender="Female",
-                dob="1990-07-15",
+                dob="1998-07-15",
                 designation="Superintendent of Police",
-                password_hash=hashed_pw,
+                password_hash=pw_hash,
                 role="admin",
                 badge_number="B1001",
-                station="HQ Command Centre",
-                status="approved"
-            )
-            db.add(new_admin)
-            db.commit()
-            db.refresh(new_admin)
-            db.add(PasswordHistory(user_id=new_admin.id, password_hash=hashed_pw))
-        elif not admin.status:
-            admin.status = "approved"
-            
-        # Check SHO
-        sho = db.query(User).filter(User.username == "sho_test").first()
-        if not sho:
-            hashed_pw = get_password_hash("sho123")
-            new_sho = User(
-                username="sho_test",
-                email="sho.cyber@police.gov.in",
-                phone="8898855515",
-                gender="Male",
-                dob="1985-04-10",
-                designation="Station House Officer",
-                password_hash=hashed_pw,
-                role="sho",
-                badge_number="B1003",
                 station="Central Cyber Police Station",
                 status="approved"
             )
-            db.add(new_sho)
+            db.add(new_ritu)
             db.commit()
-            db.refresh(new_sho)
-            db.add(PasswordHistory(user_id=new_sho.id, password_hash=hashed_pw))
-        elif not sho.status:
-            sho.status = "approved"
+            db.refresh(new_ritu)
+            db.add(PasswordHistory(user_id=new_ritu.id, password_hash=pw_hash))
+        else:
+            ritu.username = "ritu_officer"
+            ritu.password_hash = pw_hash
+            ritu.role = "admin"
+            ritu.status = "approved"
+            db.commit()
 
-        # Check officer
-        officer = db.query(User).filter(User.username == "officer_test").first()
-        if not officer:
-            hashed_pw = get_password_hash("officer123")
-            new_officer = User(
-                username="officer_test",
-                email="officer.test@police.gov.in",
-                phone="9876543210",
-                gender="Male",
-                dob="1995-11-20",
-                designation="Sub-Inspector",
-                password_hash=hashed_pw,
-                role="officer",
+        # Seed krupa_officer (Admin / Officer)
+        krupa = db.query(User).filter(User.username == "krupa_officer").first()
+        if not krupa:
+            new_krupa = User(
+                username="krupa_officer",
+                email="krupa.officer@police.gov.in",
+                phone="9876543211",
+                gender="Female",
+                dob="1998-08-20",
+                designation="Senior Investigating Officer",
+                password_hash=pw_hash,
+                role="admin",
                 badge_number="B1002",
                 station="Central Cyber Police Station",
                 status="approved"
             )
-            db.add(new_officer)
+            db.add(new_krupa)
             db.commit()
-            db.refresh(new_officer)
-            db.add(PasswordHistory(user_id=new_officer.id, password_hash=hashed_pw))
-        elif not officer.status:
-            officer.status = "approved"
-            
+            db.refresh(new_krupa)
+            db.add(PasswordHistory(user_id=new_krupa.id, password_hash=pw_hash))
+            db.commit()
         db.commit()
     except Exception as e:
         db.rollback()
