@@ -36,6 +36,11 @@ class VectorDBService:
 
     @staticmethod
     def initialize_db():
+        # Memory Protection: Render Free Tier (512MB RAM limit)
+        if os.getenv("RENDER") or os.getenv("DISABLE_CHROMA", "").lower() in ("true", "1"):
+            print("Memory-Optimized Mode: Using fast zero-RAM legal retrieval engine.")
+            return False
+
         if not CHROMA_AVAILABLE:
             print("ChromaDB library is not installed. Falling back to NumPy keyword similarity engine.")
             return False
